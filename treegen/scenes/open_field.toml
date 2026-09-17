@@ -1,0 +1,4 @@
+# No neighbours: wide crown, low first branch, retained lower limbs.
+# Neighbours are same-age crowns (age_scaled): their height follows the tree's height curve.
+name = "open_field"
+

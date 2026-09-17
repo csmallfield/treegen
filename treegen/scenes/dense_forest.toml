@@ -1,0 +1,291 @@
+# Closed stand on all sides: tall bare bole, small high crown.
+# Neighbours are same-age crowns (age_scaled): heights and radii follow the tree's height curve.
+name = "dense_forest"
+
+[[neighbour]]
+type = "capsule"
+p0 = [5.50, 5.0, 0.00]
+p1 = [5.50, 13.0, 0.00]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [2.75, 5.0, 4.76]
+p1 = [2.75, 13.0, 4.76]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-2.75, 5.0, 4.76]
+p1 = [-2.75, 13.0, 4.76]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-5.50, 5.0, 0.00]
+p1 = [-5.50, 13.0, 0.00]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-2.75, 5.0, -4.76]
+p1 = [-2.75, 13.0, -4.76]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [2.75, 5.0, -4.76]
+p1 = [2.75, 13.0, -4.76]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [10.15, 5.0, 2.70]
+p1 = [10.15, 13.0, 2.70]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [7.44, 5.0, 7.41]
+p1 = [7.44, 13.0, 7.41]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [2.74, 5.0, 10.14]
+p1 = [2.74, 13.0, 10.14]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-2.70, 5.0, 10.15]
+p1 = [-2.70, 13.0, 10.15]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-7.41, 5.0, 7.44]
+p1 = [-7.41, 13.0, 7.44]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-10.14, 5.0, 2.74]
+p1 = [-10.14, 13.0, 2.74]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-10.15, 5.0, -2.70]
+p1 = [-10.15, 13.0, -2.70]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-7.44, 5.0, -7.41]
+p1 = [-7.44, 13.0, -7.41]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-2.74, 5.0, -10.14]
+p1 = [-2.74, 13.0, -10.14]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [2.70, 5.0, -10.15]
+p1 = [2.70, 13.0, -10.15]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [7.41, 5.0, -7.44]
+p1 = [7.41, 13.0, -7.44]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [10.14, 5.0, -2.74]
+p1 = [10.14, 13.0, -2.74]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [15.42, 5.0, 1.55]
+p1 = [15.42, 13.0, 1.55]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [13.96, 5.0, 6.73]
+p1 = [13.96, 13.0, 6.73]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [10.82, 5.0, 11.10]
+p1 = [10.82, 13.0, 11.10]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [6.37, 5.0, 14.13]
+p1 = [6.37, 13.0, 14.13]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [1.15, 5.0, 15.46]
+p1 = [1.15, 13.0, 15.46]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-4.20, 5.0, 14.92]
+p1 = [-4.20, 13.0, 14.92]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-9.05, 5.0, 12.58]
+p1 = [-9.05, 13.0, 12.58]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-12.81, 5.0, 8.73]
+p1 = [-12.81, 13.0, 8.73]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-15.02, 5.0, 3.82]
+p1 = [-15.02, 13.0, 3.82]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-15.42, 5.0, -1.55]
+p1 = [-15.42, 13.0, -1.55]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-13.96, 5.0, -6.73]
+p1 = [-13.96, 13.0, -6.73]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-10.82, 5.0, -11.10]
+p1 = [-10.82, 13.0, -11.10]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-6.37, 5.0, -14.13]
+p1 = [-6.37, 13.0, -14.13]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [-1.15, 5.0, -15.46]
+p1 = [-1.15, 13.0, -15.46]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [4.20, 5.0, -14.92]
+p1 = [4.20, 13.0, -14.92]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [9.05, 5.0, -12.58]
+p1 = [9.05, 13.0, -12.58]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [12.81, 5.0, -8.73]
+p1 = [12.81, 13.0, -8.73]
+radius = 3.2
+density = 1.5
+age_scaled = true
+
+[[neighbour]]
+type = "capsule"
+p0 = [15.02, 5.0, -3.82]
+p1 = [15.02, 13.0, -3.82]
+radius = 3.2
+density = 1.5
+age_scaled = true

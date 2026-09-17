@@ -1,0 +1,52 @@
+# Scots pine — UNTUNED first pass (M7). Conifers are the hard case for space colonization:
+# whorled branching is not modelled, so expect a plausible silhouette, not pine architecture.
+[meta]
+name = "pinus_sylvestris"
+reference_age = 60
+max_age = 150
+
+[envelope]
+profile = [[0,0],[0.35,0.55],[0.75,0.45],[1,0.05]]
+height = 24.0
+spread_ratio = 0.45
+clear_height = 0.25
+
+[growth]
+attractor_count = 14000
+influence_radius = 10.0
+kill_radius = 2.0
+step_length = 0.35
+apical_dominance = 1.2
+straightness = 0.8
+trunk_bias = 0.8
+iterations_per_year = 2
+
+[architecture]
+branch_angle = { mean = 75, var = 10 }
+max_order = 3
+min_radius_for_mesh = 0.035
+
+[radii]
+pipe_exponent = 2.4
+tip_radius = 0.008
+
+[refinement]
+smoothing = 0.5
+gravity_droop = 0.3
+phototropism = 0.35
+noise = { amplitude = 0.05, frequency = 1.5 }
+
+[light]
+shed_threshold = 0.2
+foliage_density = 2.0
+
+[materials]
+order_ranges = [[0,0,"bark_mature"], [1,3,"bark_young"]]
+
+[age_response]
+height = [[0,0.08],[0.4,0.75],[1,1.0]]
+trunk_radius = [[0,0.05],[1,1.0]]
+crown_flatten = [[0,0.0],[1,0.5]]
+apical_dominance = [[0,1.0],[1,0.5]]
+shed_threshold = [[0,0.1],[1,0.3]]
+reiteration = [[0,0.0],[1,0.1]]
