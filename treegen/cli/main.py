@@ -35,7 +35,7 @@ def _floats(spec: str) -> list[float]:
 
 def build_parser():
     p = argparse.ArgumentParser(prog="treegen", description="Headless USD tree generator (Phase 1)")
-    p.add_argument("species", help="species profile .toml")
+    p.add_argument("species", nargs="?", default="species/quercus.toml", help="species profile .toml")
     p.add_argument("--seed", type=int, default=42)
     p.add_argument("--seeds", help="batch seeds, e.g. 1-12 or 3,7,9")
     p.add_argument("--age", type=float, default=None, help="years (default: species reference_age)")
@@ -52,6 +52,9 @@ def build_parser():
     p.add_argument("--cache-dir", default=".treegen_cache")
     p.add_argument("--no-cache", action="store_true")
     p.add_argument("--watch", action="store_true", help="poll the species/scene files and regenerate on change")
+    p.add_argument("--serve", action="store_true", help="start the browser viewer instead of generating files")
+    p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--no-browser", action="store_true", help="with --serve: do not open a browser window")
     p.add_argument("-q", "--quiet", action="store_true")
     p.add_argument("--version", action="version", version=f"treegen {__version__}")
     return p
@@ -120,6 +123,11 @@ def _run_once(args, pipeline: Pipeline) -> list[dict]:
 
 def main(argv=None):
     args = build_parser().parse_args(argv)
+    if args.serve:
+        from ..viewer.server import serve
+        root = Path(args.species).resolve().parent.parent if Path(args.species).exists() else Path.cwd()
+        serve(root, args.port, None if args.no_cache else args.cache_dir, not args.no_browser)
+        return 0
     pipeline = Pipeline(cache_dir=None if args.no_cache else args.cache_dir, verbose=not args.quiet)
     try:
         _run_once(args, pipeline)

@@ -1,0 +1,370 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>treegen viewer</title>
+<style>
+  :root { --bg:#14161a; --panel:#1c2026; --line:#2c323b; --fg:#d8dde5; --dim:#8b95a3; --accent:#8fbf6a; }
+  * { box-sizing: border-box; }
+  body { margin:0; height:100vh; display:flex; background:var(--bg); color:var(--fg);
+         font:12px/1.45 ui-sans-serif, system-ui, "Segoe UI", sans-serif; overflow:hidden; }
+  #view { flex:1; position:relative; }
+  #canvas { width:100%; height:100%; display:block; }
+  #hud { position:absolute; top:10px; left:12px; color:var(--dim); font-size:11px; white-space:pre; pointer-events:none;
+         text-shadow:0 1px 2px #000; }
+  #busy { position:absolute; top:10px; right:12px; color:var(--accent); font-size:11px; display:none; }
+  #panel { width:340px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:10px 12px 40px; }
+  h1 { font-size:13px; margin:2px 0 10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
+  fieldset { border:1px solid var(--line); border-radius:4px; margin:0 0 10px; padding:6px 8px 8px; }
+  legend { color:var(--dim); text-transform:uppercase; letter-spacing:.06em; font-size:10px; padding:0 4px; cursor:pointer; }
+  .row { display:flex; align-items:center; gap:6px; margin:3px 0; }
+  .row label { flex:0 0 120px; color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row input[type=range] { flex:1; min-width:0; accent-color:var(--accent); }
+  .row input[type=number], .row input[type=text], .row select {
+      width:72px; background:#11141a; color:var(--fg); border:1px solid var(--line); border-radius:3px; padding:2px 4px; }
+  .row input[type=text].wide { width:100%; font-family:ui-monospace, monospace; font-size:11px; }
+  .row select.wide { width:100%; }
+  button { background:#262c35; color:var(--fg); border:1px solid var(--line); border-radius:3px;
+           padding:5px 8px; cursor:pointer; }
+  button:hover { border-color:var(--accent); }
+  button.primary { background:var(--accent); color:#10130f; border-color:var(--accent); font-weight:600; }
+  .buttons { display:flex; gap:6px; flex-wrap:wrap; margin-top:6px; }
+  .msg { color:var(--dim); margin-top:6px; word-break:break-all; }
+  .msg.err { color:#e0714f; }
+  .collapsed .body { display:none; }
+  #variants img { width:100%; margin-top:8px; border:1px solid var(--line); }
+</style>
+<script type="importmap">
+{ "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+} }
+</script>
+</head>
+<body>
+<div id="view">
+  <canvas id="canvas"></canvas>
+  <div id="hud"></div>
+  <div id="busy">generating…</div>
+</div>
+<div id="panel">
+  <h1>treegen <span id="version"></span></h1>
+
+  <fieldset><legend>tree</legend><div class="body">
+    <div class="row"><label>species</label><select id="species" class="wide"></select></div>
+    <div class="row"><label>scene</label><select id="scene" class="wide"></select></div>
+    <div class="row"><label>seed</label><input type="range" id="seedR" min="1" max="200" step="1" value="42">
+      <input type="number" id="seedN" value="42"></div>
+    <div class="row"><label>age (years)</label><input type="range" id="ageR" min="1" max="200" step="1" value="80">
+      <input type="number" id="ageN" value="80"></div>
+    <div class="row"><label>exact on release</label><input type="checkbox" id="exact" checked>
+      <span class="msg" id="scrubNote">drag = fast approximation</span></div>
+    <div class="row"><label>geometry lod</label><input type="range" id="lodR" min="0.25" max="2" step="0.05" value="1">
+      <input type="number" id="lodN" value="1" step="0.05"></div>
+    <div class="buttons">
+      <button class="primary" id="regen">regenerate (exact)</button>
+      <button id="export">export USD</button>
+      <button id="save">save species…</button>
+      <button id="variantsBtn">variant grid</button>
+    </div>
+    <div class="msg" id="msg"></div>
+    <div id="variants"></div>
+  </div></fieldset>
+
+  <fieldset><legend>display</legend><div class="body">
+    <div class="row"><label>colour</label><select id="mode" class="wide">
+      <option value="bark">bark / order</option>
+      <option value="light">light exposure</option>
+      <option value="age">birth age</option>
+      <option value="order">branch order</option>
+      <option value="mass">downstream radius</option>
+    </select></div>
+    <div class="row"><label>meshes</label><input type="checkbox" id="showMesh" checked>
+      <label>twigs</label><input type="checkbox" id="showTwig" checked></div>
+    <div class="row"><label>skeleton</label><input type="checkbox" id="showSkel">
+      <label>shed limbs</label><input type="checkbox" id="showShed"></div>
+    <div class="row"><label>ground grid</label><input type="checkbox" id="showGrid" checked></div>
+  </div></fieldset>
+
+  <div id="params"></div>
+</div>
+
+<script type="module">
+import * as THREE from "three";
+import { OrbitControls } from "three/addons/controls/OrbitControls.js";
+
+const $ = (id) => document.getElementById(id);
+const msg = (t, err = false) => { const m = $("msg"); m.textContent = t; m.className = "msg" + (err ? " err" : ""); };
+
+// ---------------------------------------------------------------- three.js setup
+const renderer = new THREE.WebGLRenderer({ canvas: $("canvas"), antialias: true });
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x14161a);
+const camera = new THREE.PerspectiveCamera(38, 1, 0.05, 2000);
+camera.position.set(28, 14, 28);
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 9, 0);
+scene.add(new THREE.HemisphereLight(0xbcd3ff, 0x30281e, 2.1));
+const sun = new THREE.DirectionalLight(0xfff0d8, 2.0); sun.position.set(12, 26, 10); scene.add(sun);
+const grid = new THREE.GridHelper(80, 40, 0x39414c, 0x232931); scene.add(grid);
+
+function resize() {
+  const v = $("view");
+  renderer.setSize(v.clientWidth, v.clientHeight, false);
+  camera.aspect = v.clientWidth / v.clientHeight;
+  camera.updateProjectionMatrix();
+}
+addEventListener("resize", resize); resize();
+(function loop() { requestAnimationFrame(loop); controls.update(); renderer.render(scene, camera); })();
+
+// ---------------------------------------------------------------- state
+let schema = null, params = null, data = null;
+let objects = { mesh: null, twigs: null, skel: null, shed: null };
+let inflight = null, pending = false;
+
+function disposeAll() {
+  for (const k in objects) {
+    const o = objects[k];
+    if (o) { scene.remove(o); o.geometry.dispose(); o.material.dispose(); objects[k] = null; }
+  }
+}
+
+// ---------------------------------------------------------------- payload parsing
+function unpack(buf) {
+  const dv = new DataView(buf);
+  const metaLen = dv.getUint32(0, true);
+  const meta = JSON.parse(new TextDecoder().decode(new Uint8Array(buf, 4, metaLen)));
+  let off = 4 + metaLen;
+  const arr = {};
+  for (const a of meta.arrays) {
+    const bytes = a.length * 4;
+    arr[a.name] = a.type === "u32" ? new Uint32Array(buf.slice(off, off + bytes))
+                                   : new Float32Array(buf.slice(off, off + bytes));
+    off += bytes;
+  }
+  return { meta, arr };
+}
+
+// ---------------------------------------------------------------- colour ramps
+function ramp(t) {   // dark -> ember -> bright, similar to inferno
+  t = Math.min(Math.max(t, 0), 1);
+  return [Math.min(1, 0.15 + 1.9 * t * t), Math.max(0, 1.25 * t * t * t - 0.05), Math.max(0, 0.45 * (1 - t) + 0.6 * t * t * t * t)];
+}
+const ORDER_COLORS = [[0.36, 0.26, 0.18], [0.45, 0.36, 0.22], [0.42, 0.52, 0.28], [0.35, 0.58, 0.45], [0.4, 0.45, 0.7], [0.55, 0.4, 0.6]];
+
+function colorsFor(prefix, mode, meta) {
+  const a = data.arr, n = a[prefix + "_pos"].length / 3;
+  const out = new Float32Array(n * 3);
+  const ex = a[prefix + "_exposure"], ord = a[prefix + "_order"], birth = a[prefix + "_birth"];
+  const rad = a[prefix + "_radius"], dead = a[prefix + "_dead"];
+  const maxR = rad ? rad.reduce((m, v) => Math.max(m, v), 1e-6) : 1;
+  for (let i = 0; i < n; i++) {
+    let c;
+    if (mode === "light") c = ramp(ex ? ex[i] : 0);
+    else if (mode === "age") c = ramp(birth ? 1 - birth[i] / Math.max(meta.age, 1) : 0);
+    else if (mode === "order" || mode === "bark") {
+      c = ORDER_COLORS[Math.min(ord ? ord[i] : 0, ORDER_COLORS.length - 1)].slice();
+      if (mode === "bark") { c = [0.30 - 0.02 * (ord ? ord[i] : 0), 0.24, 0.17]; }
+    } else if (mode === "mass") c = ramp(rad ? Math.pow(rad[i] / maxR, 0.4) : 0);
+    else c = [0.3, 0.24, 0.17];
+    if (dead && dead[i] > 0.5) c = [0.55, 0.52, 0.47];
+    out[i * 3] = c[0]; out[i * 3 + 1] = c[1]; out[i * 3 + 2] = c[2];
+  }
+  return out;
+}
+
+// ---------------------------------------------------------------- scene build
+function rebuild() {
+  if (!data) return;
+  disposeAll();
+  const { arr, meta } = data;
+  const mode = $("mode").value;
+
+  if (arr.mesh_pos.length && $("showMesh").checked) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(arr.mesh_pos, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(colorsFor("mesh", mode, meta), 3));
+    g.setIndex(new THREE.BufferAttribute(arr.mesh_idx, 1));
+    g.computeVertexNormals();
+    const m = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.95, metalness: 0.0, flatShading: false });
+    objects.mesh = new THREE.Mesh(g, m); scene.add(objects.mesh);
+  }
+  if (arr.twig_pos.length && $("showTwig").checked) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(arr.twig_pos, 3));
+    g.setAttribute("color", new THREE.BufferAttribute(colorsFor("twig", mode, meta), 3));
+    g.setIndex(new THREE.BufferAttribute(arr.twig_idx, 1));
+    objects.twigs = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ vertexColors: true }));
+    scene.add(objects.twigs);
+  }
+  if (arr.skel_pos.length && $("showSkel").checked) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(arr.skel_pos, 3));
+    g.setIndex(new THREE.BufferAttribute(arr.skel_idx, 1));
+    objects.skel = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x78d0ff, transparent: true, opacity: 0.85 }));
+    scene.add(objects.skel);
+  }
+  if (arr.shed_pos && arr.shed_pos.length && $("showShed").checked) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(arr.shed_pos, 3));
+    objects.shed = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xd2563a, transparent: true, opacity: 0.25 }));
+    scene.add(objects.shed);
+  }
+  grid.visible = $("showGrid").checked;
+
+  $("hud").textContent =
+    `${meta.scene}  seed ${meta.seed}  age ${meta.age}  ${meta.fast ? "[fast scrub]" : "[exact]"}\n` +
+    `${meta.curves} branches   height ${meta.height.toFixed(1)} m   trunk r ${meta.trunk_radius.toFixed(3)} m\n` +
+    `${(meta.geo_stats.trunk_faces + meta.geo_stats.branch_faces).toLocaleString()} faces   ` +
+    `${meta.geo_stats.twig_curves.toLocaleString()} twig curves   ${meta.elapsed.toFixed(2)} s`;
+}
+
+// ---------------------------------------------------------------- generate
+async function generate(fast) {
+  if (inflight) { pending = true; inflight.abort(); }
+  const ctrl = new AbortController(); inflight = ctrl;
+  $("busy").style.display = "block";
+  try {
+    const r = await fetch("/api/generate", {
+      method: "POST", signal: ctrl.signal,
+      body: JSON.stringify({ params, seed: +$("seedN").value, age: +$("ageN").value,
+                             scene: $("scene").value || null, lod: +$("lodN").value, fast })
+    });
+    if (!r.ok) { msg((await r.json()).error, true); return; }
+    data = unpack(await r.arrayBuffer());
+    msg("");
+    rebuild();
+  } catch (e) {
+    if (e.name !== "AbortError") msg(String(e), true);
+  } finally {
+    inflight = null;
+    $("busy").style.display = pending ? "block" : "none";
+    if (pending) { pending = false; }
+  }
+}
+
+// ---------------------------------------------------------------- parameter panel
+function paramRow(group, p) {
+  const row = document.createElement("div"); row.className = "row";
+  const lab = document.createElement("label"); lab.textContent = p.name;
+  lab.title = (p.doc || "") + (p.unit ? ` [${p.unit}]` : "");
+  row.appendChild(lab);
+  const set = (v) => { params[group][p.name] = v; scheduleParamRegen(); };
+
+  if (p.kind === "float" || p.kind === "int") {
+    const lo = p.lo ?? 0, hi = p.hi ?? (params[group][p.name] * 4 || 1);
+    const r = document.createElement("input"); r.type = "range";
+    r.min = lo; r.max = hi; r.step = p.kind === "int" ? 1 : (hi - lo) / 200;
+    const n = document.createElement("input"); n.type = "number"; n.step = r.step;
+    r.value = n.value = params[group][p.name];
+    r.oninput = () => { n.value = r.value; set(p.kind === "int" ? +r.value | 0 : +r.value); };
+    n.onchange = () => { r.value = n.value; set(p.kind === "int" ? +n.value | 0 : +n.value); };
+    row.append(r, n);
+  } else if (p.kind === "dict") {
+    row.removeChild(lab);
+    const wrap = document.createElement("div"); wrap.style.width = "100%";
+    const head = document.createElement("div"); head.className = "msg"; head.textContent = p.name; wrap.appendChild(head);
+    for (const k of Object.keys(params[group][p.name])) {
+      const sub = document.createElement("div"); sub.className = "row";
+      const sl = document.createElement("label"); sl.textContent = "  " + k; sub.appendChild(sl);
+      const n = document.createElement("input"); n.type = "number"; n.step = 0.01;
+      n.value = params[group][p.name][k];
+      n.onchange = () => { params[group][p.name][k] = +n.value; scheduleParamRegen(); };
+      sub.appendChild(n); wrap.appendChild(sub);
+    }
+    row.appendChild(wrap);
+  } else {
+    const t = document.createElement("input"); t.type = "text"; t.className = "wide";
+    t.value = typeof params[group][p.name] === "string" ? params[group][p.name]
+                                                        : JSON.stringify(params[group][p.name]);
+    t.onchange = () => {
+      try { set(p.kind === "str" ? t.value : JSON.parse(t.value)); t.style.borderColor = ""; }
+      catch (e) { t.style.borderColor = "#e0714f"; }
+    };
+    row.appendChild(t);
+  }
+  return row;
+}
+
+function buildPanel() {
+  const host = $("params"); host.innerHTML = "";
+  for (const [group, plist] of Object.entries(schema)) {
+    const fs = document.createElement("fieldset");
+    const lg = document.createElement("legend"); lg.textContent = group;
+    const body = document.createElement("div"); body.className = "body";
+    lg.onclick = () => fs.classList.toggle("collapsed");
+    if (["age_response", "materials", "geometry"].includes(group)) fs.classList.add("collapsed");
+    plist.forEach((p) => body.appendChild(paramRow(group, p)));
+    fs.append(lg, body); host.appendChild(fs);
+  }
+}
+
+let paramTimer = null;
+function scheduleParamRegen() {
+  clearTimeout(paramTimer);
+  paramTimer = setTimeout(() => generate(false), 350);
+}
+
+// ---------------------------------------------------------------- wiring
+function pair(rangeId, numId, onChange) {
+  const r = $(rangeId), n = $(numId);
+  r.oninput = () => { n.value = r.value; onChange(false); };
+  r.onchange = () => { n.value = r.value; onChange(true); };
+  n.onchange = () => { r.value = n.value; onChange(true); };
+}
+
+async function loadSpecies(name) {
+  const r = await fetch("/api/species/" + name);
+  params = await r.json();
+  $("ageR").max = Math.round(params.meta.max_age);
+  $("ageN").value = $("ageR").value = Math.round(params.meta.reference_age);
+  buildPanel();
+  generate(false);
+}
+
+(async function init() {
+  const boot = await (await fetch("/api/bootstrap")).json();
+  schema = boot.schema;
+  $("version").textContent = boot.version;
+  for (const s of boot.species) $("species").add(new Option(s, s));
+  $("scene").add(new Option("open field (none)", ""));
+  for (const s of boot.scenes) $("scene").add(new Option(s, s));
+  $("species").onchange = () => loadSpecies($("species").value);
+  $("scene").onchange = () => generate(false);
+
+  pair("seedR", "seedN", (released) => { if (released) generate(false); });
+  pair("ageR", "ageN", (released) => generate(released ? !$("exact").checked : true));
+  pair("lodR", "lodN", (released) => { if (released) generate(false); });
+  for (const id of ["mode", "showMesh", "showTwig", "showSkel", "showShed", "showGrid"]) $(id).onchange = rebuild;
+  $("regen").onclick = () => generate(false);
+
+  $("export").onclick = async () => {
+    msg("writing USD…");
+    const r = await fetch("/api/export", { method: "POST", body: JSON.stringify(
+      { params, seed: +$("seedN").value, age: +$("ageN").value, scene: $("scene").value || null, lod: +$("lodN").value }) });
+    const j = await r.json();
+    msg(r.ok ? "wrote " + j.files[0] : j.error, !r.ok);
+  };
+  $("save").onclick = async () => {
+    const path = prompt("save species TOML as:", "species/" + params.meta.name + ".toml");
+    if (!path) return;
+    const r = await fetch("/api/save", { method: "POST", body: JSON.stringify({ params, path }) });
+    const j = await r.json();
+    msg(r.ok ? "saved " + j.path : j.error, !r.ok);
+  };
+  $("variantsBtn").onclick = async () => {
+    msg("rendering 9 variants (skeletons only)…");
+    const r = await fetch("/api/variants", { method: "POST", body: JSON.stringify(
+      { params, age: +$("ageN").value, scene: $("scene").value || null, seeds: [1,2,3,4,5,6,7,8,9] }) });
+    if (!r.ok) { msg((await r.json()).error, true); return; }
+    const url = URL.createObjectURL(await r.blob());
+    $("variants").innerHTML = `<img src="${url}">`;
+    msg("");
+  };
+
+  await loadSpecies(boot.species.includes("quercus.toml") ? "quercus.toml" : boot.species[0]);
+})();
+</script>
+</body>
+</html>

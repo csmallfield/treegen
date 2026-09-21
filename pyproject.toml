@@ -25,5 +25,8 @@ treegen = "treegen.cli.main:main"
 [tool.setuptools.packages.find]
 include = ["treegen*"]
 
+[tool.setuptools.package-data]
+treegen = ["viewer/*.html"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]

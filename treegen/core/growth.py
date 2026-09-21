@@ -56,6 +56,29 @@ class GrowthResult:
         return cls(age=float(z["age"]), **kw)
 
 
+def truncate(g: GrowthResult, age: float) -> GrowthResult:
+    """A cheap approximation of the same tree at an earlier age.
+
+    Keeps the nodes born by `age` and revives limbs shed later. Parents are always
+    born before their children, so the remaining graph stays valid. This is NOT the
+    same as simulating to `age`: the light history, vigor and refinement all ran at
+    the older age. It exists so an age slider can be dragged at interactive rates;
+    release re-runs the real simulation.
+    """
+    keep = np.flatnonzero(g.birth <= age)
+    remap = np.full(len(g.birth), -1, np.int64)
+    remap[keep] = np.arange(len(keep))
+    par = g.parent[keep]
+    state = g.state[keep].copy()
+    later = (g.shed_year[keep] > age) & (g.shed_year[keep] >= 0)
+    state[later] = ALIVE                      # not shed yet at this age
+    return GrowthResult(
+        pos=g.pos[keep], parent=np.where(par >= 0, remap[np.maximum(par, 0)], -1), birth=g.birth[keep],
+        state=state, depth=g.depth[keep], shed_year=g.shed_year[keep], shed_tips=np.zeros(len(keep), np.float32),
+        exposure=g.exposure[keep], light_dir=g.light_dir[keep], attractors=g.attractors,
+        attractor_state=g.attractor_state, age=float(age), stats=dict(g.stats, truncated_from=g.age))
+
+
 class _Nodes:
     """Growable struct-of-arrays."""
 

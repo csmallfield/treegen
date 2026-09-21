@@ -4,8 +4,7 @@ Headless, USD-native procedural tree generator. Space colonization plus a light
 occlusion field drives the skeleton; the USD output ships the skeleton as a
 first-class FX deliverable. Geometry only: no foliage, no texturing, no welding.
 
-Status: prototype covering design-doc milestones M1–M5 and a first pass at M7.
-The Hydra viewer (M6) is not built yet — use `--watch` with usdview/Solaris/Blender.
+Status: prototype covering design-doc milestones M1–M6 and a first pass at M7.
 
 ![definition of done](docs/definition_of_done.png)
 
@@ -46,7 +45,32 @@ treegen species/quercus.toml --age 80 -o out/oak.usda --watch
 
 # the Phase 1 definition-of-done batch
 ./scripts/definition_of_done.sh
+
+# interactive viewer in the browser
+treegen --serve
 ```
+
+## Viewer
+
+`treegen --serve` starts a local server on `127.0.0.1:8765` and opens a browser. The
+parameter panel is generated from `schema.py`, so a new parameter appears there with no
+viewer code. Buttons write USD, save the tuned species back to TOML, and render a
+9-seed variant grid.
+
+The viewer draws treegen's own arrays with three.js — it is not a Hydra viewport. The
+`usd-core` wheel ships no imaging, so a real Hydra view means NVIDIA's prebuilt USD and
+its own Python. Use the viewer for tuning and usdview for verifying the USD itself.
+
+**The age slider has two modes.** Dragging runs a fast approximation: the tree is
+simulated once at `max_age` and truncated by birth year, which is ~50 ms per frame after
+the first simulation. Releasing re-runs the real simulation for that age when *exact on
+release* is ticked. The approximation differs because shedding, vigor and refinement all
+ran at the older age; heights land within a few percent, but treat it as a scrub preview,
+not as ground truth.
+
+three.js loads from unpkg, so the viewer needs internet on first load. To work offline,
+download `three.module.js` and `OrbitControls.js` next to `index.html` and point the
+import map at them.
 
 Open `out/oak.usda` in usdview, Solaris (sublayer or reference), Blender (USD import),
 Maya (mayaUSD) or Gaffer. The skeleton has `purpose = guide`; enable guides to see it.
@@ -65,6 +89,7 @@ growth, so changing `[geometry]` or `[radii]` re-runs in well under a second.
 | `--skeleton-only` | skip geometry and USD (fast M1–M4 loop) |
 | `--png`, `--png-mode`, `--contact-sheet` | matplotlib previews |
 | `--lod`, `--flatten` | geometry resolution, single-file output |
+| `--serve`, `--port`, `--no-browser` | browser viewer |
 | `--watch`, `--no-cache`, `--cache-dir`, `-q` | workflow |
 
 ## Layout
@@ -78,6 +103,7 @@ treegen/
   usd/             stage (layers, primvars, subsets, materials)
   cli/             argparse entry point
   preview.py       silhouettes and contact sheets
+  viewer/          local server (stdlib http), binary payload packer, single-file three.js frontend
 species/           quercus (tuned), pinus and betula (untuned first passes)
 scenes/            open_field, dense_forest, forest_edge
 docs/USD_CONTRACT.md
@@ -141,4 +167,7 @@ are applied as `curve(n) / curve(n_ref)`, so the species file is exactly true at
   key per-curve lookdev off `primvars:branchOrder`.
 - **Frames**: the root frame seeds from world +X. It is stable under sim-scale tilts,
   not under arbitrary rotation of the whole skeleton.
-- **Not yet built**: viewer (M6), junction welds, UsdSkel export, mesh/implicit envelopes.
+- **Viewer**: no Hydra, no curve editing (curves and lists are JSON text fields), and a
+  parameter change invalidates the fast-scrub cache, so the next drag pays for one full
+  simulation.
+- **Not yet built**: junction welds, UsdSkel export, mesh/implicit envelopes.
