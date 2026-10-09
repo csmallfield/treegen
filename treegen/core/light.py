@@ -164,3 +164,27 @@ def neighbour_bounds(neighbours: list[Neighbour], hscale: float = 1.0):
         for p in pts:
             lo, hi = np.minimum(lo, p), np.maximum(hi, p)
     return lo, hi
+
+
+def crown_shade(params: dict, neighbours: list[Neighbour], env, hscale: float) -> float:
+    """Fraction of sky light the neighbours alone take from the sides of a crown, in [0, 1].
+
+    Samples just inside the envelope's surface on three rings around the crown and
+    marches through a neighbour-only field, without the tree's own foliage, so it
+    measures the stand rather than self-shading. 0 means no neighbours in the way.
+    """
+    if not neighbours:
+        return 0.0
+    L = params["light"]
+    R, H = env.radius, env.height
+    lo, hi = np.array([-2.5 * R, 0.0, -2.5 * R]), np.array([2.5 * R, 1.6 * H, 2.5 * R])
+    nlo, nhi = neighbour_bounds(neighbours, hscale)
+    lo, hi = np.maximum(np.minimum(lo, nlo), [-3 * R, 0.0, -3 * R]), np.minimum(np.maximum(hi, nhi), [3 * R, 2 * H, 3 * R])
+    field_ = LightField.build(lo, hi, 32, neighbours, np.zeros((0, 3)), 0.0, L["ray_count"], L["sky_bias"], hscale)
+    t = np.array([0.35, 0.55, 0.75])
+    a = np.linspace(0, 2 * np.pi, 16, endpoint=False)
+    T, A = np.meshgrid(t, a, indexing="ij")
+    r = 0.9 * env.radius_at(T)
+    pts = np.stack([r * np.cos(A), T * H, r * np.sin(A)], -1).reshape(-1, 3)
+    expo, _ = field_.sample(pts)
+    return float(np.clip(1.0 - expo.mean(), 0.0, 1.0))

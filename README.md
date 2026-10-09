@@ -49,6 +49,11 @@ treegen species/quercus.toml --age 80 -o out/oak.usda --watch
 # the Phase 1 definition-of-done batch
 ./scripts/definition_of_done.sh      # or .\scripts\definition_of_done.ps1 on Windows
 
+# the same batch as numbers (height, crown base, crown width, lean, DBH), compared
+# against the recorded baseline; --set tries a parameter without editing the TOML
+python scripts/dod_metrics.py --compare docs/metrics/dod_baseline.json
+python scripts/dod_metrics.py --set envelope.shade_response=0.6 --compare docs/metrics/dod_baseline.json
+
 # interactive viewer in the browser
 treegen --serve
 ```
@@ -155,7 +160,10 @@ Space inside a proxy counts as occupied: the tree cannot grow there.
 
 1. **Attractors** are seeded once in the largest envelope the tree will ever have. Each
    one activates the year the growing envelope reaches it, so a young tree is the
-   literal past of an old one.
+   literal past of an old one. With `envelope.shade_response > 0`, the envelope first
+   measures how much sky the neighbour proxies take from the crown's sides, and
+   stretches each year's envelope to `height x (1 + k*shade)`, `radius / (1 + k*shade)`:
+   shade avoidance. The open field has no shade, so it is never affected.
 2. **Colonization** runs `iterations_per_year` steps per year. Directions are weighted by
    attractor exposure. Apical bias, heading memory and a gravitropism clamp are applied,
    and a branch-angle constraint is enforced on laterals.
@@ -181,9 +189,10 @@ are applied as `curve(n) / curve(n_ref)`, so the species file is exactly true at
 
 ## Known limitations / next steps
 
-- **Envelope vs light**: the envelope caps height, so forest trees cannot outgrow the
-  stand and the bare bole is shorter than it should be. Candidate fix: soften the
-  envelope to a bias once the light field exists.
+- **Envelope vs light**: the envelope caps height. `envelope.shade_response` lets a
+  shaded crown stretch taller and narrower (default 0, so nothing changes until a
+  species opts in). It also weakens the forest-edge lean, because the envelope narrows
+  on the open side too; see `docs/HANDOFF.md` for the numbers.
 - **Occasional looping limbs** in shaded crowns. Colonization still chases lit
   attractors around the crown shell; it is visible in the dense forest at 80 years.
 - **Scenes are identical at 20 years**: same-age neighbours have not closed canopy yet.

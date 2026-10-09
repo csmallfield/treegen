@@ -41,3 +41,26 @@ def test_forest_sheds_more_than_open(small_oak):
         pts = sk.parent_point[sk.parent_point >= 0]
         return sk.points[pts, 1].min()
     assert first_branch_height(f) > first_branch_height(o)
+
+
+def test_shade_response_leaves_the_open_field_alone(small_oak):
+    from treegen.core.growth import envelope_stretch
+    p = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 1.0}}
+    assert envelope_stretch(p, Scene())(80) == 1.0
+    a = grow(small_oak, Scene(), 7, 30)
+    b = grow(p, Scene(), 7, 30)
+    assert np.array_equal(a.pos, b.pos)
+
+
+def test_shade_response_makes_a_forest_tree_taller_and_narrower(small_oak):
+    from treegen.core.growth import envelope_stretch
+    from treegen.metrics import tree_metrics
+    forest = load_scene(ROOT / "scenes" / "dense_forest.toml")
+    p = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 0.6}}
+    s = envelope_stretch(p, forest)
+    assert s(0) >= 1.0 and s(80) > 1.2                    # the stand shades the crown's sides
+    plain = tree_metrics(assemble_skeleton(grow(small_oak, forest, 5, 80), small_oak, 5))
+    shaded = tree_metrics(assemble_skeleton(grow(p, forest, 5, 80), p, 5))
+    assert shaded["height"] > plain["height"] * 1.15
+    assert shaded["crown_base"] > plain["crown_base"]
+    assert shaded["crown_width"] < plain["crown_width"]

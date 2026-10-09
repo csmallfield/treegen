@@ -125,7 +125,7 @@ class Session:
             finally:
                 self.running = None
 
-        extras = debug_arrays(g, params, age) if body.get("debug") else None
+        extras = debug_arrays(g, params, age, scene) if body.get("debug") else None
         meta = {"version": __version__, "age": age, "seed": seed, "fast": fast,
                 "scene": scene.name, "curves": int(sk.curve_count), "height": float(sk.height),
                 "trunk_radius": float(sk.radius[0]), "dbh": sk.dbh, "elapsed": perf_counter() - t0,

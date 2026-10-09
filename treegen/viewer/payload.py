@@ -35,15 +35,20 @@ def _line_segments(points, counts):
     return np.concatenate(segs).astype(np.uint32).reshape(-1) if segs else np.zeros(0, np.uint32)
 
 
-def debug_arrays(growth, params, age):
-    """Attractor cloud and envelope wireframe — the two views that show why growth went where it did."""
+def debug_arrays(growth, params, age, scene=None):
+    """Attractor cloud and envelope wireframe — the two views that show why growth went where it did.
+
+    With a scene, the envelope is drawn with its shade-avoidance stretch at this age.
+    """
     from ..core.age import age_state
     from ..core.envelope import Envelope
+    from ..core.growth import envelope_stretch
     out = {}
     if growth is not None and len(growth.attractors):
         out["attr_pos"] = growth.attractors.astype(np.float32).reshape(-1)
         out["attr_state"] = growth.attractor_state.astype(np.float32)
-    env = Envelope.at_age(params, age_state(params, age))
+    stretch = envelope_stretch(params, scene)(age) if scene is not None else 1.0
+    env = Envelope.at_age(params, age_state(params, age), stretch)
     t = np.linspace(0.0, 1.0, 33)
     out["env_profile"] = np.stack([t * env.height, env.radius_at(t)], 1).astype(np.float32).reshape(-1)
     return out

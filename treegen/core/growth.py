@@ -22,7 +22,7 @@ from scipy.spatial import cKDTree
 from ..schema import Scene
 from .age import age_state
 from .envelope import Envelope
-from .light import LightField, _inside, neighbour_bounds
+from .light import LightField, _inside, crown_shade, neighbour_bounds
 from .util import UP, depth_levels, hash01, normalize, rng
 
 ALIVE, DEAD, SHED = 0, 1, 2
@@ -128,23 +128,48 @@ class _Nodes:
 
 
 # ---------------------------------------------------------------------------------------------
-def _max_extent(params, max_age):
+def _no_stretch(year):
+    return 1.0
+
+
+def envelope_stretch(params: dict, scene: Scene):
+    """Shade avoidance: year -> envelope stretch factor, 1 + shade_response * crown_shade.
+
+    Measured from the neighbour proxies alone at a few ages and interpolated, so it
+    is known before the simulation starts and attractor seeding stays a pure function
+    of (params, scene, seed). Open field, or shade_response = 0, is exactly 1.
+    """
+    k = params["envelope"]["shade_response"]
+    if k <= 0 or not scene.neighbours:
+        return _no_stretch
+    ages = np.linspace(0.0, params["meta"]["max_age"], 9)
+    vals = []
+    for a in ages:
+        st = age_state(params, a)
+        shade = crown_shade(params, scene.neighbours, Envelope.at_age(params, st), st.height_mult)
+        vals.append(1.0 + k * shade)
+    return lambda year: float(np.interp(year, ages, vals))
+
+
+def _max_extent(params, max_age, stretch=_no_stretch):
     h = r = 0.0
     for y in np.linspace(0, max_age, 101):
-        e = Envelope.at_age(params, age_state(params, y))
+        e = Envelope.at_age(params, age_state(params, y), stretch(y))
         h, r = max(h, e.height), max(r, e.radius)
     return h, r
 
 
-def seed_attractors(params: dict, seed: int):
+def seed_attractors(params: dict, seed: int, stretch=_no_stretch):
     """Seed attractors once in the largest envelope the tree will ever have.
 
     Each attractor gets an activation year — the first year the growing envelope
     contains it. Density is constant, so the attractor field of a young tree is a
     strict subset of the old tree's. That subset property is what keeps ages coherent.
+    `stretch` (see envelope_stretch) reshapes each year's envelope; density stays the
+    species' own, taken from the unstretched envelope at reference age.
     """
     meta = params["meta"]
-    H, R = _max_extent(params, meta["max_age"])
+    H, R = _max_extent(params, meta["max_age"], stretch)
     ref_env = Envelope.at_age(params, age_state(params, meta["reference_age"]))
     density = params["growth"]["attractor_count"] / max(ref_env.volume(), 1e-9)
     cyl_vol = math.pi * R * R * H
@@ -161,7 +186,7 @@ def seed_attractors(params: dict, seed: int):
         pending = ~np.isfinite(act)
         if not pending.any():
             break
-        e = Envelope.at_age(params, age_state(params, float(yr)))
+        e = Envelope.at_age(params, age_state(params, float(yr)), stretch(float(yr)))
         hit = pending.copy()
         hit[pending] = e.inside(pts[pending])
         act[hit] = yr
@@ -176,7 +201,7 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
     infl, kill = G["influence_radius"] * step, G["kill_radius"] * step
     ipy = G["iterations_per_year"]
 
-    att, act_year, (Hmax, Rmax) = seed_attractors(params, seed)
+    att, act_year, (Hmax, Rmax) = seed_attractors(params, seed, envelope_stretch(params, scene))
     a_state = np.zeros(len(att), np.int8)
     a_weight = np.ones(len(att), np.float32)
 

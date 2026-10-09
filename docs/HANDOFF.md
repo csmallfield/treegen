@@ -213,6 +213,7 @@ model implies.
 2. **Fast-scrub cache keyed to more than one parameter set.** Today any tier-3 edit
    invalidates it, so the next age drag pays for a full max-age simulation.
 3. **Envelope versus light** — the main open design question from the doc, deferred twice.
+   *Status 2026-10-09: first pass done, oak not re-tuned yet; see the note below the list.*
    The envelope caps height, so a forest tree cannot outgrow the stand and the bare bole
    stays shorter than it should be. Candidate: make the envelope a soft bias once the light
    field exists, rather than a hard cap. This changes silhouettes everywhere and will need
@@ -240,6 +241,33 @@ model implies.
   in the README.
 
 ---
+
+### Envelope versus light: what was tried (2026-10-09)
+
+Measured with `scripts/dod_metrics.py` against `docs/metrics/dod_baseline.json`
+(oak, seed 42; the baseline is today's hard envelope). Baseline facts worth knowing:
+height is the same in every scene (~21 m at 80 y, ~24.5 m at 200 y) because the
+envelope is the binding limit, and the dense-forest crown at 80 y is nearly as wide as
+the open-field one (25.5 vs 26.5 m), because the same-age neighbour proxies top out
+around 16 m at reference age, so the oak escapes above them and spreads.
+
+1. **Soft boundary (rejected).** Attractor density fading as exp(-distance / s) outside
+   the envelope. At s = 0.15 every scene, open field included, grew from 21 m to ~35 m tall
+   and 26 m to ~56 m wide at 80 y, and the scenes converged again. Colonization grows
+   toward any attractor in reach however sparse, and outside the envelope everything is
+   lit in every scene, so light cannot tell forest from open there. Code removed.
+2. **Shade response (kept, `envelope.shade_response`, default 0).** The envelope
+   stretches with the side shade the neighbour proxies cast (measured before the
+   simulation, neighbours only). Open field is unchanged by construction (tested).
+   At k = 0.6, 80 y: dense forest 29.7 m tall (was 21.2), crown base 10.7 m (was 6.4),
+   crown width 19.9 m (was 25.5). The cost: forest-edge lean, measured as crown
+   x-offset into the clearing at 200 y, drops from 3.5 m to 0.9 m, because the narrower
+   envelope also narrows the open side. Height-only stretching (radius unchanged) was
+   tried; it loses the forest narrowing (28 m wide) and still reduces the lean.
+
+Open decision: what k the oak should use, and whether to recover the edge lean, for
+example by offsetting the envelope toward the side the neighbour shade leaves open
+(still emergent from neighbour placement, not a lean parameter).
 
 ## 6. Working agreements from the session
 

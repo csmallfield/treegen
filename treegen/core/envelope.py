@@ -17,11 +17,12 @@ class Envelope:
     clear_height: float = 0.0
 
     @classmethod
-    def at_age(cls, params: dict, st: AgeState) -> "Envelope":
+    def at_age(cls, params: dict, st: AgeState, stretch: float = 1.0) -> "Envelope":
+        """stretch > 1 makes the crown taller and narrower by the same factor (shade avoidance)."""
         e = params["envelope"]
         flat = st.crown_flatten_delta
-        h = e["height"] * st.height_mult * (1.0 - 0.4 * flat)
-        r = 0.5 * e["height"] * e["spread_ratio"] * st.height_mult * (1.0 + 0.3 * flat)
+        h = e["height"] * st.height_mult * (1.0 - 0.4 * flat) * stretch
+        r = 0.5 * e["height"] * e["spread_ratio"] * st.height_mult * (1.0 + 0.3 * flat) / stretch
         return cls(tuple(map(tuple, e["profile"])), max(h, 0.05), max(r, 0.02), e["clear_height"])
 
     def radius_at(self, t):

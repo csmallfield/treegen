@@ -48,6 +48,10 @@ SCHEMA: list[Param] = [
     P("envelope", "spread_ratio", 1.15, lo=0.05, hi=4, doc="Crown diameter / height"),
     P("envelope", "clear_height", 0.0, lo=0, hi=0.9,
       doc="Fraction of height below which no attractors are seeded (0 lets light decide)"),
+    P("envelope", "shade_response", 0.0, lo=0, hi=3,
+      doc="Shade avoidance: with neighbours shading the crown's sides, the envelope stretches to "
+          "height x (1 + k*shade) and radius / (1 + k*shade). Shade is 0 in the open, so the "
+          "open-field tree is unchanged"),
     # growth ----------------------------------------------------------------
     P("growth", "attractor_count", 8000, "int", lo=100, hi=500_000,
       doc="Attractors inside the envelope at reference age (density is held constant across ages)"),
