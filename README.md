@@ -44,7 +44,7 @@ treegen species/quercus.toml --seeds 1-12 --skeleton-only --contact-sheet out/va
 treegen species/quercus.toml --age 80 -o out/oak.usda --watch
 
 # the Phase 1 definition-of-done batch
-./scripts/definition_of_done.sh
+./scripts/definition_of_done.sh      # or .\scripts\definition_of_done.ps1 on Windows
 
 # interactive viewer in the browser
 treegen --serve
