@@ -154,7 +154,12 @@ range and cached. Next largest cost is hemisphere ray marching, ~3.8 s, harder t
 
 ## 4. Open bugs, with diagnoses
 
-These were reported at the very end of the session and are **not fixed**. Diagnoses are from
+> **Fixed 2026-10-09 (viewer pass 3)**, all five plus: the fast-scrub cache was keyed on
+> every parameter, so any tier-1/2 edit threw away the max-age simulation; `<fieldset>`'s
+> default `min-width:min-content` was the real cause of item 1; and the HUD now shows DBH
+> (the 1.343 m noted below the list was the flare-base radius, not a radii bug).
+
+These were reported at the very end of the session. Diagnoses are from
 reading the code, not from reproducing, except where noted.
 
 1. **Right panel is a fixed 340 px and always horizontally scrolls.**

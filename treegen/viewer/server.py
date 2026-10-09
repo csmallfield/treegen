@@ -13,6 +13,13 @@ static file; everything below is JSON in, binary out.
 
 Fast mode simulates once at meta.max_age and truncates by birth year, which makes
 the age slider interactive; exact mode re-runs the simulation for that age.
+
+Generate requests are serialised by one lock, and the browser aborts its previous
+request whenever it sends a new one. So a request that finds a newer one has
+arrived answers 409 instead of running, and a simulation still in progress is
+cancelled when a newer request needs a *different* simulation (one that only
+needs the same growth result is left to finish, since it will reuse it). The
+max-age simulation behind the fast scrub is never cancelled.
 """
 from __future__ import annotations
 
@@ -26,11 +33,18 @@ from time import perf_counter
 from .. import __version__
 from ..core.growth import truncate
 from ..pipeline import Pipeline, assemble_skeleton
-from ..schema import GROUPS, SCHEMA, STAGE_GROUPS, Scene, load_scene, load_species, validate
+from ..schema import GROUPS, SCHEMA, STAGE_GROUPS, Scene, group_hash, load_scene, load_species, scene_key, validate
 from . import jobs
 from .payload import debug_arrays, pack
 
 HERE = Path(__file__).parent
+
+# The browser hung up (aborted fetch, closed tab). Not an error worth a traceback.
+DISCONNECTS = (ConnectionAbortedError, ConnectionResetError, BrokenPipeError)
+
+
+class Superseded(Exception):
+    """A newer generate request arrived; this one's result would be thrown away."""
 
 
 # 1 = geometry rebuild only, 2 = skeleton + geometry, 3 = full simulation.
@@ -53,7 +67,22 @@ class Session:
         self.root = root
         self.pipeline = Pipeline(cache_dir=cache_dir)
         self.lock = threading.Lock()
-        self._full = None            # (key, GrowthResult at max_age)
+        self._full = None            # (growth key, GrowthResult at max_age)
+        self._seq_lock = threading.Lock()
+        self._latest = (0, None)     # (sequence number, growth key) of the newest generate
+        self.running = None          # sequence number of the generate holding the lock
+
+    def _arrive(self, gkey):
+        with self._seq_lock:
+            seq = self._latest[0] + 1
+            self._latest = (seq, gkey)
+            return seq
+
+    def _check(self, seq, gkey):
+        """Progress hook: abort a simulation a newer request has no use for."""
+        latest, latest_key = self._latest
+        if latest > seq and latest_key != gkey:
+            raise Superseded()
 
     def species_files(self):
         return sorted(p.name for p in (self.root / "species").glob("*.toml"))
@@ -72,24 +101,34 @@ class Session:
         scene = self._scene(body.get("scene"))
         fast = bool(body.get("fast", False))
         t0 = perf_counter()
+        # only the simulation inputs: tier 1-2 edits must not throw away the max-age run
+        sim_age = params["meta"]["max_age"] if fast else age
+        gkey = group_hash(params, STAGE_GROUPS["skeleton"], [seed, sim_age, scene_key(scene)])
+        seq = self._arrive(gkey)
+        check = lambda *_: self._check(seq, gkey)            # noqa: E731
 
         with self.lock:
-            if fast:
-                max_age = params["meta"]["max_age"]
-                key = (json.dumps(params, sort_keys=True), seed, scene.name, max_age)
-                if self._full is None or self._full[0] != key:
-                    self._full = (key, self.pipeline.growth(params, scene, seed, max_age))
-                g = truncate(self._full[1], age)
-                sk = assemble_skeleton(g, params, seed)
-                from ..geo.sweep import build_geometry
-                geo = build_geometry(sk, params, lod)
-            else:
-                g, sk, geo = self.pipeline.geometry(params, scene, seed, age, lod)
+            if self._latest[0] > seq:
+                raise Superseded()
+            self.running = seq
+            try:
+                if fast:
+                    if self._full is None or self._full[0] != gkey:
+                        # never cancelled: the max-age run is what makes every later scrub fast
+                        self._full = (gkey, self.pipeline.growth(params, scene, seed, sim_age))
+                    g = truncate(self._full[1], age)
+                    sk = assemble_skeleton(g, params, seed)
+                    from ..geo.sweep import build_geometry
+                    geo = build_geometry(sk, params, lod)
+                else:
+                    g, sk, geo = self.pipeline.geometry(params, scene, seed, age, lod, progress=check)
+            finally:
+                self.running = None
 
         extras = debug_arrays(g, params, age) if body.get("debug") else None
         meta = {"version": __version__, "age": age, "seed": seed, "fast": fast,
                 "scene": scene.name, "curves": int(sk.curve_count), "height": float(sk.height),
-                "trunk_radius": float(sk.radius[0]), "elapsed": perf_counter() - t0,
+                "trunk_radius": float(sk.radius[0]), "dbh": sk.dbh, "elapsed": perf_counter() - t0,
                 "stats": {k: v for k, v in g.stats.items() if isinstance(v, (int, float))},
                 "geo_stats": geo.stats}
         return pack(sk, geo, g, meta, extras)
@@ -151,15 +190,24 @@ class Handler(BaseHTTPRequestHandler):
     def log_message(self, *a):
         pass
 
+    def handle_one_request(self):
+        try:
+            super().handle_one_request()
+        except DISCONNECTS:
+            self.close_connection = True
+
     def _send(self, code, body=b"", ctype="application/json"):
         if isinstance(body, (dict, list)):
             body = json.dumps(body).encode()
-        self.send_response(code)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(len(body)))
-        self.send_header("Cache-Control", "no-store")
-        self.end_headers()
-        self.wfile.write(body)
+        try:
+            self.send_response(code)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(len(body)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(body)
+        except DISCONNECTS:
+            self.close_connection = True
 
     def do_GET(self):
         s = self.session
@@ -202,6 +250,8 @@ class Handler(BaseHTTPRequestHandler):
                 return self._send(200, s.save_species(body))
             if self.path == "/api/variants":
                 return self._send(200, s.variants(body))
+        except Superseded:
+            return self._send(409, {"error": "superseded by a newer request", "superseded": True})
         except Exception as e:                            # noqa: BLE001
             import traceback
             traceback.print_exc()

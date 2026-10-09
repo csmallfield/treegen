@@ -21,22 +21,29 @@ def _segments(sk, axes):
     return np.stack([P[ia], P[ib]], 1), ib
 
 
-def render_png(sk, path, growth=None, mode="skeleton", title=None, size=6.0, extent=None):
+VIEWS = {"side": ([0, 1], "side (X)"), "front": ([2, 1], "front (Z)")}
+
+
+def render_png(sk, path, growth=None, mode="skeleton", title=None, size=6.0, extent=None,
+               views=("side", "front"), half_width=None):
+    """extent / half_width fix the frame (metres) so several renders share one scale."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     from matplotlib.collections import LineCollection
 
-    fig, axs = plt.subplots(1, 2, figsize=(size * 2, size), dpi=110)
+    fig, axs = plt.subplots(1, len(views), figsize=(size * len(views), size), dpi=110, squeeze=False)
     H = extent or max(sk.height * 1.05, 1.0)
-    for ax, axes, label in ((axs[0], [0, 1], "side (X)"), (axs[1], [2, 1], "front (Z)")):
+    W = max(half_width or 0.0, H * 0.55)
+    for ax, view in zip(axs[0], views):
+        axes, label = VIEWS[view]
         if mode == "shed" and growth is not None:
             shed = np.flatnonzero((growth.state == 2) & (growth.parent >= 0))
             if len(shed):
                 segs = np.stack([growth.pos[growth.parent[shed]][:, axes], growth.pos[shed][:, axes]], 1)
                 ax.add_collection(LineCollection(segs, colors=(0.85, 0.3, 0.2, 0.25), linewidths=0.5))
         segs, ib = _segments(sk, axes)
-        scale = 72 * size / (1.1 * H)          # metres -> points
+        scale = 72 * size / max(1.1 * H, 2 * W)   # metres -> points
         lw = np.clip(2 * sk.radius[ib] * scale, 0.15, None)
         if mode == "light":
             cmap = plt.get_cmap("inferno")
@@ -44,11 +51,12 @@ def render_png(sk, path, growth=None, mode="skeleton", title=None, size=6.0, ext
         else:
             colors = np.where(sk.dead[ib][:, None], [[0.55, 0.5, 0.45, 1]], [[0.18, 0.14, 0.1, 1]])
         ax.add_collection(LineCollection(segs, colors=colors, linewidths=lw, capstyle="round"))
-        ax.set_xlim(-H * 0.55, H * 0.55)
+        ax.set_xlim(-W, W)
         ax.set_ylim(-0.02 * H, H * 1.08)
         ax.set_aspect("equal")
         ax.axhline(0, color="0.7", lw=0.5)
-        ax.set_title(label, fontsize=9)
+        if len(views) > 1:
+            ax.set_title(label, fontsize=9)
         ax.tick_params(labelsize=7)
     if title:
         fig.suptitle(title, fontsize=11)

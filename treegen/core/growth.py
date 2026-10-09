@@ -283,7 +283,7 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
         ok = dn > 0.3 * step            # no near-duplicate nodes
         if ok.any():
             nodes.add(new[ok], src[ok], year)
-        if progress and it % 20 == 0:
+        if progress and it % 10 == 0:
             progress(it / max(total_iters, 1), f"year {year:.0f}: {nodes.n} nodes")
 
     # ---- final light sample for primvars ------------------------------------------------------

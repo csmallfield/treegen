@@ -113,3 +113,79 @@ def test_neighbour_rasterisation_is_cached():
     _NB_CACHE.clear()
     b = LightField.build(**kw, neighbour_height_scale=1.0)
     assert np.array_equal(a.density, b.density) and a.density.sum() > 0
+
+
+def test_queued_generate_is_superseded(small_oak):
+    """A request still waiting for the lock when a newer one arrives must not run."""
+    import threading
+    import time
+    from treegen.viewer.server import Superseded
+    s = Session(ROOT, None)
+    out = {}
+
+    def run(name, body):
+        try:
+            out[name] = _meta(s.generate(body))
+        except Superseded:
+            out[name] = "superseded"
+
+    s.lock.acquire()                           # stand-in for a simulation in progress
+    a = threading.Thread(target=run, args=("a", {"params": small_oak, "seed": 2, "age": 20}))
+    a.start()
+    while s._latest[0] < 1:
+        time.sleep(0.01)
+    b = threading.Thread(target=run, args=("b", {"params": small_oak, "seed": 3, "age": 20}))
+    b.start()
+    while s._latest[0] < 2:
+        time.sleep(0.01)
+    s.lock.release()
+    a.join(); b.join()
+    assert out["a"] == "superseded"
+    assert out["b"]["seed"] == 3
+
+
+def test_running_simulation_is_cancelled_by_a_different_request(small_oak):
+    import threading
+    import time
+    from treegen.viewer.server import Superseded
+    s = Session(ROOT, None)
+    out = {}
+
+    def run():
+        try:
+            out["a"] = _meta(s.generate({"params": small_oak, "seed": 2, "age": 150}))
+        except Superseded:
+            out["a"] = "superseded"
+
+    t = threading.Thread(target=run)
+    t.start()
+    while s.running is None:
+        time.sleep(0.01)
+    b = _meta(s.generate({"params": small_oak, "seed": 4, "age": 10}))
+    t.join()
+    assert out["a"] == "superseded" and b["seed"] == 4
+
+
+def test_fast_scrub_survives_cheap_edits(small_oak):
+    """A geometry or radii edit must not throw away the max-age simulation."""
+    import copy
+    s = Session(ROOT, None)
+    warm = _meta(s.generate({"params": small_oak, "seed": 2, "age": 40, "fast": True}))
+    edited = copy.deepcopy(small_oak)
+    edited["refinement"]["gravity_droop"] = 1.4
+    edited["geometry"]["radial_segments"]["max"] = 12
+    again = _meta(s.generate({"params": edited, "seed": 2, "age": 30, "fast": True}))
+    assert again["elapsed"] < warm["elapsed"] / 4
+
+
+def test_dbh_is_measured_above_the_flare(small_oak):
+    s = Session(ROOT, None)
+    meta = _meta(s.generate({"params": small_oak, "seed": 2, "age": 60}))
+    assert 0 < meta["dbh"] < 2 * meta["trunk_radius"]
+
+
+def test_variant_is_one_square_view(small_oak):
+    from treegen.viewer.jobs import render_variant
+    _, png = render_variant(str(ROOT), small_oak, 5, 25, None)
+    w, h = struct.unpack(">II", png[16:24])
+    assert w == h

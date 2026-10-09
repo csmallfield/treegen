@@ -52,6 +52,24 @@ class Skeleton:
     def curve_count(self):
         return len(self.counts)
 
+    @property
+    def dbh(self) -> float:
+        """Trunk diameter at breast height (1.3 m), above the flare — the forester's measure.
+
+        radius[0] sits at the flare base and reads ~1.4x larger. Trees shorter than
+        1.3 m report the diameter of their top trunk point.
+        """
+        a, b = self.offsets[0], self.offsets[1]
+        y, r = self.points[a:b, 1], self.radius[a:b]
+        above = np.flatnonzero(y >= 1.3)
+        if len(above) == 0:
+            return float(2 * r[-1])
+        k = int(above[0])
+        if k == 0:
+            return float(2 * r[0])
+        t = (1.3 - y[k - 1]) / max(y[k] - y[k - 1], 1e-9)
+        return float(2 * (r[k - 1] + t * (r[k] - r[k - 1])))
+
 
 def assemble_skeleton(g: GrowthResult, params: dict, seed: int) -> Skeleton:
     st = age_state(params, g.age)

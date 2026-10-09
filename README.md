@@ -64,19 +64,28 @@ its own Python. Use the viewer for tuning and usdview for verifying the USD itse
 **The parameter panel is tiered by cost.** A coloured dot on each row says what a change
 invalidates: green = geometry only, amber = skeleton + geometry, red = a full simulation.
 Green and amber rows update live while you drag (about 50-100 ms round trip, because the
-simulation is reused from cache); red rows are debounced and re-simulate.
+simulation is reused from cache); red rows are debounced and re-simulate. A request that a
+newer one has replaced is dropped (HTTP 409, ignored by the page), and a simulation still
+running is cancelled when the newer request needs a different one, so dragging a red
+slider never builds a queue. Drag the bar on the panel's left edge to resize it.
 
 **Debug views**: the display section can overlay the attractor cloud (grey = never reached,
 green = active, blue = consumed, red = shaded out), the crown envelope at the current age,
 and the skeleton and shed limbs. Attractors and envelope are only sent when their toggle is
 on, since the cloud adds about 1 MB.
 
-**Variant grid** renders nine seeds in worker processes and fills the grid as each finishes,
-skeleton silhouettes only. Expect roughly (seeds / cores) x one simulation.
+**Variant grid** renders nine seeds in worker processes and fills an overlay on the viewport
+as each finishes: one side-view skeleton silhouette per seed, all framed by the envelope at
+that age so heights compare directly. Click a tree to load its seed; Esc closes the grid.
+Expect roughly (seeds / cores) x one simulation.
+
+**The HUD shows DBH**, the trunk diameter at 1.3 m. The radius at the very base of the trunk
+includes the root flare and reads about 1.4x larger.
 
 **The age slider has two modes.** Dragging runs a fast approximation: the tree is
 simulated once at `max_age` and truncated by birth year, which is ~50 ms per frame after
-the first simulation. Releasing re-runs the real simulation for that age when *exact on
+the first simulation. Green and amber edits keep that simulation; only red edits, a new
+seed or a new scene pay for it again. Releasing re-runs the real simulation for that age when *exact on
 release* is ticked. The approximation differs because shedding, vigor and refinement all
 ran at the older age; heights land within a few percent, but treat it as a scrub preview,
 not as ground truth.

@@ -8,22 +8,26 @@
   * { box-sizing: border-box; }
   body { margin:0; height:100vh; display:flex; background:var(--bg); color:var(--fg);
          font:12px/1.45 ui-sans-serif, system-ui, "Segoe UI", sans-serif; overflow:hidden; }
-  #view { flex:1; position:relative; }
+  #view { flex:1; min-width:0; position:relative; overflow:hidden; }   /* else the canvas's old width blocks shrinking */
   #canvas { width:100%; height:100%; display:block; }
   #hud { position:absolute; top:10px; left:12px; color:var(--dim); font-size:11px; white-space:pre; pointer-events:none;
          text-shadow:0 1px 2px #000; }
   #busy { position:absolute; top:10px; right:12px; color:var(--accent); font-size:11px; display:none; }
-  #panel { width:340px; background:var(--panel); border-left:1px solid var(--line); overflow-y:auto; padding:10px 12px 40px; }
+  #panel { width:340px; flex:0 0 auto; background:var(--panel); overflow-y:auto; overflow-x:hidden; padding:10px 12px 40px; }
+  #splitter { flex:0 0 5px; cursor:col-resize; background:var(--line); }
+  #splitter:hover, #splitter.dragging { background:var(--accent); }
   h1 { font-size:13px; margin:2px 0 10px; letter-spacing:.08em; text-transform:uppercase; color:var(--dim); }
-  fieldset { border:1px solid var(--line); border-radius:4px; margin:0 0 10px; padding:6px 8px 8px; }
+  /* fieldsets default to min-width:min-content, which pushed the panel into a horizontal scroll */
+  fieldset { border:1px solid var(--line); border-radius:4px; margin:0 0 10px; padding:6px 8px 8px; min-width:0; }
   legend { color:var(--dim); text-transform:uppercase; letter-spacing:.06em; font-size:10px; padding:0 4px; cursor:pointer; }
   .row { display:flex; align-items:center; gap:6px; margin:3px 0; }
-  .row label { flex:0 0 120px; color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+  .row label { flex:0 1 120px; min-width:0; color:var(--fg); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
   .row input[type=range] { flex:1; min-width:0; accent-color:var(--accent); }
   .row input[type=number], .row input[type=text], .row select {
       width:72px; background:#11141a; color:var(--fg); border:1px solid var(--line); border-radius:3px; padding:2px 4px; }
-  .row input[type=text].wide { width:100%; font-family:ui-monospace, monospace; font-size:11px; }
-  .row select.wide { width:100%; }
+  .row input[type=number] { flex:0 0 auto; }
+  .row .wide, .row .grow { flex:1 1 0; min-width:0; width:auto; }
+  .row input[type=text].wide { font-family:ui-monospace, monospace; font-size:11px; }
   button { background:#262c35; color:var(--fg); border:1px solid var(--line); border-radius:3px;
            padding:5px 8px; cursor:pointer; }
   button:hover { border-color:var(--accent); }
@@ -32,12 +36,24 @@
   .msg { color:var(--dim); margin-top:6px; word-break:break-all; }
   .msg.err { color:#e0714f; }
   .collapsed .body { display:none; }
-  #variants { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:8px; }
-  #variants img { width:100%; border:1px solid var(--line); background:#fff; }
-  #variants .slot { aspect-ratio:1; border:1px dashed var(--line); border-radius:3px; }
-  .dot { flex:0 0 7px; height:7px; border-radius:50%; margin-right:2px; }
+  [hidden] { display:none !important; }
+  #variantsOverlay { position:absolute; inset:0; background:rgba(20,22,26,.94); display:flex; flex-direction:column;
+                     padding:14px 16px 16px; gap:10px; }
+  .vhead { display:flex; align-items:center; gap:10px; color:var(--dim); }
+  .vhead span { flex:1; }
+  #variants { flex:1; min-height:0; display:grid; grid-template-columns:repeat(3, minmax(0,1fr));
+              grid-template-rows:repeat(3, minmax(0,1fr)); gap:8px; }
+  #variants .cell { display:flex; flex-direction:column; min-height:0; border:1px solid var(--line); border-radius:4px;
+                    background:#fff; overflow:hidden; }
+  #variants .cell.ready { cursor:pointer; }
+  #variants .cell.ready:hover { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent); }
+  #variants .cell.current { border-color:var(--accent); }
+  #variants .cell.pending { background:transparent; border-style:dashed; justify-content:flex-end; }
+  #variants img { flex:1; min-height:0; width:100%; object-fit:contain; }
+  #variants .cap { flex:0 0 auto; padding:2px 6px; background:var(--panel); color:var(--fg); font-size:11px; }
+  .dot { flex:0 0 7px; width:7px; height:7px; border-radius:50%; margin-right:2px; display:inline-block; }
+  legend .dot { margin:0 6px 1px 0; vertical-align:middle; }
   .t1 { background:#6fc98a; } .t2 { background:#e0b558; } .t3 { background:#d2563a; }
-  .legendkey { float:right; color:var(--dim); font-size:10px; }
   #tierhelp { color:var(--dim); margin:-4px 0 8px; font-size:10px; }
 </style>
 <script type="importmap">
@@ -52,7 +68,12 @@
   <canvas id="canvas"></canvas>
   <div id="hud"></div>
   <div id="busy">generating…</div>
+  <div id="variantsOverlay" hidden>
+    <div class="vhead"><span id="vtitle"></span><button id="vclose">close (Esc)</button></div>
+    <div id="variants"></div>
+  </div>
 </div>
+<div id="splitter" title="drag to resize the panel"></div>
 <div id="panel">
   <h1>treegen <span id="version"></span></h1>
 
@@ -64,7 +85,7 @@
     <div class="row"><label>age (years)</label><input type="range" id="ageR" min="1" max="200" step="1" value="80">
       <input type="number" id="ageN" value="80"></div>
     <div class="row"><label>exact on release</label><input type="checkbox" id="exact" checked>
-      <span class="msg" id="scrubNote">drag = fast approximation</span></div>
+      <span class="msg grow" id="scrubNote">drag = fast approximation</span></div>
     <div class="row"><label>geometry lod</label><input type="range" id="lodR" min="0.25" max="2" step="0.05" value="1">
       <input type="number" id="lodN" value="1" step="0.05"></div>
     <div class="buttons">
@@ -74,7 +95,6 @@
       <button id="variantsBtn">variant grid</button>
     </div>
     <div class="msg" id="msg"></div>
-    <div id="variants"></div>
   </div></fieldset>
 
   <fieldset><legend>display</legend><div class="body">
@@ -95,7 +115,8 @@
     <div class="msg">attractors: grey = never reached, green = active, blue = consumed, red = shaded out</div>
   </div></fieldset>
 
-  <div id="tierhelp">● instant (geometry) &nbsp; ● fast (skeleton) &nbsp; ● needs a full simulation</div>
+  <div id="tierhelp"><span class="dot t1"></span> instant (geometry) &nbsp; <span class="dot t2"></span> fast (skeleton)
+    &nbsp; <span class="dot t3"></span> full simulation</div>
   <div id="params"></div>
 </div>
 
@@ -118,6 +139,26 @@ controls.target.set(0, 9, 0);
 scene.add(new THREE.HemisphereLight(0xbcd3ff, 0x30281e, 2.1));
 const sun = new THREE.DirectionalLight(0xfff0d8, 2.0); sun.position.set(12, 26, 10); scene.add(sun);
 const grid = new THREE.GridHelper(80, 40, 0x39414c, 0x232931); scene.add(grid);
+
+// panel width: drag the splitter; remembered per browser
+const PANEL_KEY = "treegen.panelWidth";
+function setPanelWidth(w) {
+  w = Math.round(Math.min(Math.max(w, 260), Math.max(260, innerWidth - 320)));
+  $("panel").style.width = w + "px";
+  resize();
+  return w;
+}
+try { const w = +localStorage.getItem(PANEL_KEY); if (w) $("panel").style.width = w + "px"; } catch (e) {}
+$("splitter").onpointerdown = (ev) => {
+  const sp = $("splitter"); sp.setPointerCapture(ev.pointerId); sp.classList.add("dragging");
+  const x0 = ev.clientX, w0 = $("panel").offsetWidth;
+  let w = w0;
+  sp.onpointermove = (e) => { w = setPanelWidth(w0 + (x0 - e.clientX)); };
+  sp.onpointerup = () => {
+    sp.onpointermove = sp.onpointerup = null; sp.classList.remove("dragging");
+    try { localStorage.setItem(PANEL_KEY, String(w)); } catch (e) {}
+  };
+};
 
 function resize() {
   const v = $("view");
@@ -265,7 +306,7 @@ function rebuild() {
 
   $("hud").textContent =
     `${meta.scene}  seed ${meta.seed}  age ${meta.age}  ${meta.fast ? "[fast scrub]" : "[exact]"}\n` +
-    `${meta.curves} branches   height ${meta.height.toFixed(1)} m   trunk r ${meta.trunk_radius.toFixed(3)} m\n` +
+    `${meta.curves} branches   height ${meta.height.toFixed(1)} m   DBH ${meta.dbh.toFixed(2)} m\n` +
     `${(meta.geo_stats.trunk_faces + meta.geo_stats.branch_faces).toLocaleString()} faces   ` +
     `${meta.geo_stats.twig_curves.toLocaleString()} twig curves   ${meta.elapsed.toFixed(2)} s`;
 }
@@ -282,6 +323,7 @@ async function generate(fast) {
                              scene: $("scene").value || null, lod: +$("lodN").value, fast,
                              debug: $("showAttr").checked || $("showEnv").checked })
     });
+    if (r.status === 409) return;                    // a newer request replaced this one
     if (!r.ok) { msg((await r.json()).error, true); return; }
     data = unpack(await r.arrayBuffer());
     msg("");
@@ -324,7 +366,7 @@ function paramRow(group, p) {
     row.append(r, n);
   } else if (p.kind === "dict") {
     row.removeChild(lab);
-    const wrap = document.createElement("div"); wrap.style.width = "100%";
+    const wrap = document.createElement("div"); wrap.className = "grow";
     const head = document.createElement("div"); head.className = "msg"; head.textContent = p.name; wrap.appendChild(head);
     for (const k of Object.keys(params[group][p.name])) {
       const sub = document.createElement("div"); sub.className = "row";
@@ -352,10 +394,11 @@ function buildPanel() {
   const host = $("params"); host.innerHTML = "";
   for (const [group, plist] of Object.entries(schema)) {
     const fs = document.createElement("fieldset");
-    const lg = document.createElement("legend"); lg.textContent = group;
-    const key = document.createElement("span"); key.className = "legendkey";
-    key.textContent = ["", "live", "live", "resim"][tiers[group] || 3];
-    lg.appendChild(key);
+    const tier = tiers[group] || 3;
+    const lg = document.createElement("legend");
+    const key = document.createElement("span"); key.className = "dot t" + tier;
+    lg.title = tier < 3 ? "updates live while dragging" : "needs a full simulation";
+    lg.append(key, group);
     const body = document.createElement("div"); body.className = "body";
     lg.onclick = () => fs.classList.toggle("collapsed");
     if (["age_response", "materials", "geometry"].includes(group)) fs.classList.add("collapsed");
@@ -381,10 +424,62 @@ function pair(rangeId, numId, onChange) {
 async function loadSpecies(name) {
   const r = await fetch("/api/species/" + name);
   params = await r.json();
+  $("species").value = name;
   $("ageR").max = Math.round(params.meta.max_age);
   $("ageN").value = $("ageR").value = Math.round(params.meta.reference_age);
   buildPanel();
   generate(false);
+}
+
+// ---------------------------------------------------------------- variant grid
+let variantPoll = null;
+function closeVariants() {
+  clearInterval(variantPoll); variantPoll = null;
+  $("variantsOverlay").hidden = true;
+}
+async function showVariants() {
+  closeVariants();
+  const seeds = [1, 2, 3, 4, 5, 6, 7, 8, 9], age = +$("ageN").value;
+  const sceneName = $("scene").value || "open field";
+  const r = await fetch("/api/variants", { method: "POST", body: JSON.stringify(
+    { params, age, scene: $("scene").value || null, seeds }) });
+  const job = await r.json();
+  if (!r.ok) { msg(job.error, true); return; }
+  const title = (n) => `${params.meta.name} · ${sceneName} · age ${age} — ${n} / ${seeds.length} ready · ` +
+                       "click a tree to use its seed (all drawn at the same scale)";
+  $("vtitle").textContent = title(0);
+  $("variants").innerHTML = seeds.map((s) =>
+    `<div class="cell pending" id="vcell${s}"><div class="cap">seed ${s} · growing…</div></div>`).join("");
+  $("variantsOverlay").hidden = false;
+  const shown = new Set();
+  const poll = variantPoll = setInterval(async () => {
+    let st;
+    try {
+      const res = await fetch("/api/variants/" + job.id);
+      st = await res.json();
+      if (!res.ok) throw new Error(st.error);
+    } catch (e) {
+      if (variantPoll !== poll) return;
+      clearInterval(variantPoll); variantPoll = null;
+      $("vtitle").textContent = "variants failed: " + e.message;
+      return;
+    }
+    if (variantPoll !== poll) return;               // closed or replaced while this poll was in flight
+    for (const s of st.ready) {
+      if (shown.has(s)) continue;
+      shown.add(s);
+      const cell = $("vcell" + s);
+      cell.className = "cell ready" + (s === +$("seedN").value ? " current" : "");
+      cell.innerHTML = `<img src="/api/variants/${job.id}/${s}" alt="seed ${s}"><div class="cap">seed ${s}</div>`;
+      cell.onclick = () => {
+        $("seedN").value = $("seedR").value = s;
+        closeVariants();
+        generate(false);
+      };
+    }
+    $("vtitle").textContent = title(st.ready.length) + (st.errors.length ? " · error: " + st.errors[0] : "");
+    if (st.done) { clearInterval(variantPoll); variantPoll = null; }
+  }, 700);
 }
 
 (async function init() {
@@ -418,26 +513,9 @@ async function loadSpecies(name) {
     const j = await r.json();
     msg(r.ok ? "saved " + j.path : j.error, !r.ok);
   };
-  $("variantsBtn").onclick = async () => {
-    const seeds = [1,2,3,4,5,6,7,8,9];
-    const r = await fetch("/api/variants", { method: "POST", body: JSON.stringify(
-      { params, age: +$("ageN").value, scene: $("scene").value || null, seeds }) });
-    const start = await r.json();
-    if (!r.ok) { msg(start.error, true); return; }
-    $("variants").innerHTML = seeds.map((s) => `<div class="slot" id="slot${s}"></div>`).join("");
-    const shown = new Set();
-    msg(`variants: 0 / ${seeds.length}`);
-    const poll = setInterval(async () => {
-      const st = await (await fetch("/api/variants/" + start.id)).json();
-      for (const s of st.ready) {
-        if (shown.has(s)) continue;
-        shown.add(s);
-        $("slot" + s).outerHTML = `<img id="slot${s}" src="/api/variants/${start.id}/${s}" title="seed ${s}">`;
-      }
-      msg(`variants: ${st.ready.length} / ${seeds.length}` + (st.errors.length ? "  " + st.errors[0] : ""));
-      if (st.done) { clearInterval(poll); if (!st.errors.length) msg(""); }
-    }, 700);
-  };
+  $("variantsBtn").onclick = showVariants;
+  $("vclose").onclick = closeVariants;
+  addEventListener("keydown", (e) => { if (e.key === "Escape") closeVariants(); });
 
   await loadSpecies(boot.species.includes("quercus.toml") ? "quercus.toml" : boot.species[0]);
 })();
