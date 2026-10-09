@@ -279,21 +279,22 @@ function rebuild() {
     scene.add(objects.attr);
   }
   if (arr.env_profile && $("showEnv").checked) {
-    const prof = arr.env_profile, rings = 9, seg = 48, pts = [];
+    const prof = arr.env_profile, axis = arr.env_axis, rings = 9, seg = 48, pts = [];
     const n = prof.length / 2;
-    const sample = (i) => ({ y: prof[i*2], r: prof[i*2+1] });
+    const sample = (i) => ({ y: prof[i*2], r: prof[i*2+1], x: axis ? axis[i*2] : 0, z: axis ? axis[i*2+1] : 0 });
     for (let k = 0; k < rings; k++) {                   // horizontal rings
-      const i = Math.round(k * (n - 1) / (rings - 1)), { y, r } = sample(i);
+      const i = Math.round(k * (n - 1) / (rings - 1)), { y, r, x, z } = sample(i);
       for (let j = 0; j < seg; j++) {
         const a = 2*Math.PI*j/seg, b = 2*Math.PI*(j+1)/seg;
-        pts.push(Math.cos(a)*r, y, Math.sin(a)*r, Math.cos(b)*r, y, Math.sin(b)*r);
+        pts.push(x + Math.cos(a)*r, y, z + Math.sin(a)*r, x + Math.cos(b)*r, y, z + Math.sin(b)*r);
       }
     }
     for (let j = 0; j < 8; j++) {                        // vertical profile lines
       const a = 2*Math.PI*j/8;
       for (let i = 0; i < n - 1; i++) {
         const p0 = sample(i), p1 = sample(i+1);
-        pts.push(Math.cos(a)*p0.r, p0.y, Math.sin(a)*p0.r, Math.cos(a)*p1.r, p1.y, Math.sin(a)*p1.r);
+        pts.push(p0.x + Math.cos(a)*p0.r, p0.y, p0.z + Math.sin(a)*p0.r,
+                 p1.x + Math.cos(a)*p1.r, p1.y, p1.z + Math.sin(a)*p1.r);
       }
     }
     const g = new THREE.BufferGeometry();

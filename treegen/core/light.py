@@ -166,15 +166,18 @@ def neighbour_bounds(neighbours: list[Neighbour], hscale: float = 1.0):
     return lo, hi
 
 
-def crown_shade(params: dict, neighbours: list[Neighbour], env, hscale: float) -> float:
-    """Fraction of sky light the neighbours alone take from the sides of a crown, in [0, 1].
+def crown_shade(params: dict, neighbours: list[Neighbour], env, hscale: float):
+    """How the neighbours alone light the sides of a crown: (shade, (ax, az)).
 
-    Samples just inside the envelope's surface on three rings around the crown and
-    marches through a neighbour-only field, without the tree's own foliage, so it
-    measures the stand rather than self-shading. 0 means no neighbours in the way.
+    shade is the fraction of sky light they take, in [0, 1]. (ax, az) is the light
+    asymmetry: the exposure-weighted mean of the horizontal directions to the sample
+    points, 0 when the stand is symmetric and pointing at the open side when not
+    (about 0.3 toward the clearing for forest_edge). Samples sit just inside the
+    envelope's surface on three rings and march through a neighbour-only field,
+    without the tree's own foliage, so this measures the stand, not self-shading.
     """
     if not neighbours:
-        return 0.0
+        return 0.0, (0.0, 0.0)
     L = params["light"]
     R, H = env.radius, env.height
     lo, hi = np.array([-2.5 * R, 0.0, -2.5 * R]), np.array([2.5 * R, 1.6 * H, 2.5 * R])
@@ -187,4 +190,6 @@ def crown_shade(params: dict, neighbours: list[Neighbour], env, hscale: float) -
     r = 0.9 * env.radius_at(T)
     pts = np.stack([r * np.cos(A), T * H, r * np.sin(A)], -1).reshape(-1, 3)
     expo, _ = field_.sample(pts)
-    return float(np.clip(1.0 - expo.mean(), 0.0, 1.0))
+    u = np.stack([np.cos(A), np.sin(A)], -1).reshape(-1, 2)
+    asym = (expo[:, None] * u).sum(0) / max(float(expo.sum()), 1e-9)
+    return float(np.clip(1.0 - expo.mean(), 0.0, 1.0)), (float(asym[0]), float(asym[1]))

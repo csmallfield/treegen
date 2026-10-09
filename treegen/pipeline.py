@@ -25,7 +25,7 @@ from .core.refine import refine
 from .core.skeleton import Branches, build_graph, extract_branches
 from .schema import STAGE_GROUPS, Scene, group_hash, scene_key
 
-CACHE_VERSION = 1
+CACHE_VERSION = 2          # bump whenever growth output changes for the same parameters
 
 
 @dataclass
@@ -116,7 +116,7 @@ class Pipeline:
         if key in self._mem:
             self._log("growth: memory cache hit")
             return self._mem[key]
-        path = self.cache_dir / f"growth-{key[2]}.npz" if self.cache_dir else None
+        path = self.cache_dir / f"growth-v{CACHE_VERSION}-{key[2]}.npz" if self.cache_dir else None
         if path and path.exists():
             self._log(f"growth: disk cache hit ({path.name})")
             res = GrowthResult.from_npz(path)

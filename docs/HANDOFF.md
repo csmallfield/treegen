@@ -264,10 +264,19 @@ around 16 m at reference age, so the oak escapes above them and spreads.
    x-offset into the clearing at 200 y, drops from 3.5 m to 0.9 m, because the narrower
    envelope also narrows the open side. Height-only stretching (radius unchanged) was
    tried; it loses the forest narrowing (28 m wide) and still reduces the lean.
+3. **Shade response + lean (kept).** The same neighbour-only measurement also gives a
+   light-asymmetry vector (about 0.30 toward +X for forest_edge, 0.01 for dense_forest).
+   The envelope axis is sheared by `k * asymmetry` of its radius at the top, base fixed
+   at the trunk. At k = 0.6 the edge crown offset is 2.3 m at 80 y and 3.7 m at 200 y
+   (baseline 1.4 and 3.5), while dense forest keeps its gain (29.7 m tall, crown base
+   9.9 m, 20.2 m wide at 80 y). Lean still comes only from neighbour placement.
+   Visible side effect worth watching: a slight S-bend low on the dense-forest trunk.
 
-Open decision: what k the oak should use, and whether to recover the edge lean, for
-example by offsetting the envelope toward the side the neighbour shade leaves open
-(still emergent from neighbour placement, not a lean parameter).
+The disk cache file name now carries `CACHE_VERSION` (it did not before, so a bump
+had no effect on disk). Bump it whenever growth output changes for the same params.
+
+Open decision: what k the oak should use. Then regenerate the definition-of-done
+sheet and re-record `docs/metrics/dod_baseline.json`.
 
 ## 6. Working agreements from the session
 

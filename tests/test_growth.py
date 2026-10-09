@@ -44,23 +44,39 @@ def test_forest_sheds_more_than_open(small_oak):
 
 
 def test_shade_response_leaves_the_open_field_alone(small_oak):
-    from treegen.core.growth import envelope_stretch
+    from treegen.core.growth import envelope_response
     p = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 1.0}}
-    assert envelope_stretch(p, Scene())(80) == 1.0
+    assert envelope_response(p, Scene())(80) == (1.0, (0.0, 0.0))
     a = grow(small_oak, Scene(), 7, 30)
     b = grow(p, Scene(), 7, 30)
     assert np.array_equal(a.pos, b.pos)
 
 
 def test_shade_response_makes_a_forest_tree_taller_and_narrower(small_oak):
-    from treegen.core.growth import envelope_stretch
+    from treegen.core.growth import envelope_response
     from treegen.metrics import tree_metrics
     forest = load_scene(ROOT / "scenes" / "dense_forest.toml")
     p = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 0.6}}
-    s = envelope_stretch(p, forest)
-    assert s(0) >= 1.0 and s(80) > 1.2                    # the stand shades the crown's sides
+    stretch, lean = envelope_response(p, forest)(80)
+    assert stretch > 1.2                                  # the stand shades the crown's sides
+    assert abs(lean[0]) < 0.05 and abs(lean[1]) < 0.05    # ...evenly, so no lean
     plain = tree_metrics(assemble_skeleton(grow(small_oak, forest, 5, 80), small_oak, 5))
     shaded = tree_metrics(assemble_skeleton(grow(p, forest, 5, 80), p, 5))
     assert shaded["height"] > plain["height"] * 1.15
     assert shaded["crown_base"] > plain["crown_base"]
     assert shaded["crown_width"] < plain["crown_width"]
+
+
+def test_shade_response_leans_the_edge_tree_toward_the_clearing(small_oak):
+    from treegen.core.envelope import Envelope
+    from treegen.core.growth import envelope_response
+    edge = load_scene(ROOT / "scenes" / "forest_edge.toml")      # stand on -X, clearing on +X
+    p = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 0.6}}
+    stretch, (lx, lz) = envelope_response(p, edge)(80)
+    assert lx > 0.1 and abs(lz) < 0.05
+    env = Envelope.at_age(p, age_state(p, 80), stretch, (lx, lz))
+    t = 0.9
+    ax = env.axis_at(t)[0]
+    edge_pt = np.array([[env.radius_at(t) + 0.5 * ax, t * env.height, 0.0]])   # rim, clearing side
+    mirrored = edge_pt * [-1, 1, 1]                                            # same point, stand side
+    assert env.inside(edge_pt)[0] and not env.inside(mirrored)[0]             # the axis really moved

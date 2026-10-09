@@ -101,7 +101,7 @@ def test_debug_arrays_are_optional(small_oak):
     plain = {a["name"] for a in _meta(s.generate({"params": small_oak, "seed": 2, "age": 30}))["arrays"]}
     debug = {a["name"] for a in _meta(s.generate({"params": small_oak, "seed": 2, "age": 30, "debug": True}))["arrays"]}
     assert "attr_pos" not in plain
-    assert {"attr_pos", "attr_state", "env_profile"} <= debug
+    assert {"attr_pos", "attr_state", "env_profile", "env_axis"} <= debug
 
 
 def test_variant_renders_a_png(small_oak):

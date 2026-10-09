@@ -41,7 +41,7 @@ def render_variant(root: str, params: dict, seed: int, age: float, scene_name: s
     matplotlib.use("Agg")
     from ..core.age import age_state
     from ..core.envelope import Envelope
-    from ..core.growth import envelope_stretch
+    from ..core.growth import envelope_response
     from ..pipeline import Pipeline
     from ..preview import render_png
     from ..schema import Scene, load_scene
@@ -49,9 +49,9 @@ def render_variant(root: str, params: dict, seed: int, age: float, scene_name: s
     scene = load_scene(Path(root) / "scenes" / scene_name) if scene_name else Scene()
     _, sk = Pipeline().skeleton(params, scene, int(seed), float(age))
     buf = io.BytesIO()
-    env = Envelope.at_age(params, age_state(params, age), envelope_stretch(params, scene)(age))
+    env = Envelope.at_age(params, age_state(params, age), *envelope_response(params, scene)(age))
     render_png(sk, buf, mode="skeleton", size=size, views=("side",),
-               extent=max(env.height * 1.1, sk.height * 1.05), half_width=env.radius * 1.15)
+               extent=max(env.height * 1.1, sk.height * 1.05), half_width=env.reach * 1.15)
     return int(seed), buf.getvalue()
 
 

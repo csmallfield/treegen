@@ -38,19 +38,22 @@ def _line_segments(points, counts):
 def debug_arrays(growth, params, age, scene=None):
     """Attractor cloud and envelope wireframe — the two views that show why growth went where it did.
 
-    With a scene, the envelope is drawn with its shade-avoidance stretch at this age.
+    With a scene, the envelope is drawn with its shade-avoidance stretch and lean at
+    this age. env_profile is (height, radius) pairs along the axis; env_axis is the
+    (x, z) axis offset at each of those heights.
     """
     from ..core.age import age_state
     from ..core.envelope import Envelope
-    from ..core.growth import envelope_stretch
+    from ..core.growth import envelope_response
     out = {}
     if growth is not None and len(growth.attractors):
         out["attr_pos"] = growth.attractors.astype(np.float32).reshape(-1)
         out["attr_state"] = growth.attractor_state.astype(np.float32)
-    stretch = envelope_stretch(params, scene)(age) if scene is not None else 1.0
-    env = Envelope.at_age(params, age_state(params, age), stretch)
+    shape = envelope_response(params, scene)(age) if scene is not None else (1.0, (0.0, 0.0))
+    env = Envelope.at_age(params, age_state(params, age), *shape)
     t = np.linspace(0.0, 1.0, 33)
     out["env_profile"] = np.stack([t * env.height, env.radius_at(t)], 1).astype(np.float32).reshape(-1)
+    out["env_axis"] = np.stack(env.axis_at(t), 1).astype(np.float32).reshape(-1)
     return out
 
 
