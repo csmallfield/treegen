@@ -9,6 +9,15 @@ from treegen.schema import load_species, validate
 from treegen.viewer.server import Session, to_toml
 
 
+def _wait(cond, timeout=60.0):
+    """Poll until cond() is true; fail instead of hanging if it never is."""
+    import time
+    end = time.monotonic() + timeout
+    while not cond():
+        assert time.monotonic() < end, "timed out waiting for the server thread"
+        time.sleep(0.01)
+
+
 def _meta(blob):
     n = struct.unpack("<I", blob[:4])[0]
     return json.loads(blob[4:4 + n])
@@ -118,7 +127,6 @@ def test_neighbour_rasterisation_is_cached():
 def test_queued_generate_is_superseded(small_oak):
     """A request still waiting for the lock when a newer one arrives must not run."""
     import threading
-    import time
     from treegen.viewer.server import Superseded
     s = Session(ROOT, None)
     out = {}
@@ -132,12 +140,10 @@ def test_queued_generate_is_superseded(small_oak):
     s.lock.acquire()                           # stand-in for a simulation in progress
     a = threading.Thread(target=run, args=("a", {"params": small_oak, "seed": 2, "age": 20}))
     a.start()
-    while s._latest[0] < 1:
-        time.sleep(0.01)
+    _wait(lambda: s._latest[0] >= 1)
     b = threading.Thread(target=run, args=("b", {"params": small_oak, "seed": 3, "age": 20}))
     b.start()
-    while s._latest[0] < 2:
-        time.sleep(0.01)
+    _wait(lambda: s._latest[0] >= 2)
     s.lock.release()
     a.join(); b.join()
     assert out["a"] == "superseded"
@@ -146,7 +152,6 @@ def test_queued_generate_is_superseded(small_oak):
 
 def test_running_simulation_is_cancelled_by_a_different_request(small_oak):
     import threading
-    import time
     from treegen.viewer.server import Superseded
     s = Session(ROOT, None)
     out = {}
@@ -159,8 +164,7 @@ def test_running_simulation_is_cancelled_by_a_different_request(small_oak):
 
     t = threading.Thread(target=run)
     t.start()
-    while s.running is None:
-        time.sleep(0.01)
+    _wait(lambda: s.running is not None or "a" in out)
     b = _meta(s.generate({"params": small_oak, "seed": 4, "age": 10}))
     t.join()
     assert out["a"] == "superseded" and b["seed"] == 4

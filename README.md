@@ -1,10 +1,13 @@
 # treegen — Phase 1
 
+[![tests](https://github.com/csmallfield/treegen/actions/workflows/tests.yml/badge.svg)](https://github.com/csmallfield/treegen/actions/workflows/tests.yml)
+
 Headless, USD-native procedural tree generator. Space colonization plus a light
 occlusion field drives the skeleton; the USD output ships the skeleton as a
 first-class FX deliverable. Geometry only: no foliage, no texturing, no welding.
 
-Status: prototype covering design-doc milestones M1–M6 and a first pass at M7.
+Status: prototype covering design-doc milestones M1–M6 and a first pass at M7. The design doc
+is [docs/Treegen___Phase_1_Design_Doc.md](docs/Treegen___Phase_1_Design_Doc.md).
 
 ![definition of done](docs/definition_of_done.png)
 
