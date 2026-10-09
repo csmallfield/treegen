@@ -203,7 +203,7 @@ are applied as `curve(n) / curve(n_ref)`, so the species file is exactly true at
 
 - **Envelope vs light**: the envelope caps height. `envelope.shade_response` lets a
   shaded crown stretch taller and narrower and lean toward open sky (default 0; the oak
-  uses 0.6). `docs/metrics/dod_hard_envelope.json` holds the oak's numbers from before,
+  uses 0.6, and a 3 m `architecture.bole_height`). `docs/metrics/dod_hard_envelope.json` holds the oak's numbers from before,
   and `docs/HANDOFF.md` the comparison.
 - **Occasional looping limbs** in shaded crowns. Colonization still chases lit
   attractors around the crown shell; it is visible in the dense forest at 80 years.

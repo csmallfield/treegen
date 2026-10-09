@@ -90,7 +90,8 @@ def _with(params, group, **kw):
 
 def test_bole_height_raises_the_first_fork(small_oak):
     from treegen.metrics import tree_metrics
-    plain = tree_metrics(assemble_skeleton(grow(small_oak, Scene(), 5, 80), small_oak, 5))
+    off = _with(small_oak, "architecture", bole_height=0.0)
+    plain = tree_metrics(assemble_skeleton(grow(off, Scene(), 5, 80), off, 5))
     p = _with(small_oak, "architecture", bole_height=4.0)
     lifted = tree_metrics(assemble_skeleton(grow(p, Scene(), 5, 80), p, 5))
     assert lifted["first_fork"] >= 4.0 > plain["first_fork"]

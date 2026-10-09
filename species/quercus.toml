@@ -23,6 +23,7 @@ iterations_per_year = 2
 [architecture]
 branch_angle = { mean = 48, var = 12 }
 max_order = 4
+bole_height = 3.0          # clear trunk below the first limb at reference age (crown lifting)
 min_radius_for_mesh = 0.04
 
 [radii]

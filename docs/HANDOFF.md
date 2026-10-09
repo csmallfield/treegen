@@ -294,7 +294,8 @@ Added `architecture.bole_height` (crown lifting, tier 3) and `radii.trunk_thickn
 (tier 2, live), both off by default; a 1.8 m figure 3 m from the trunk in the viewer
 and the PNGs. First fork at 80 y, open / dense / edge: off 1.4 / 7.3 / 1.4 m,
 bole 3 m 4.5 / 6.0 / 3.8 m, bole 5 m 6.0 / 6.3 / 5.8 m, with height and width nearly
-unchanged. The oak does not use it yet.
+unchanged. **Adopted:** `quercus.toml` uses `bole_height = 3.0` (trunk_thickness stays 1);
+the definition-of-done sheet and `docs/metrics/dod_baseline.json` were regenerated with it.
 
 ## 6. Working agreements from the session
 
