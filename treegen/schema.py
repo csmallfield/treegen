@@ -70,6 +70,9 @@ SCHEMA: list[Param] = [
     P("architecture", "branch_angle", {"mean": 48.0, "var": 12.0}, "dict", unit="deg",
       doc="Minimum divergence between a lateral and its sibling continuation"),
     P("architecture", "max_order", 4, "int", lo=0, hi=12, doc="Branches above this order are pruned at extraction"),
+    P("architecture", "bole_height", 0.0, lo=0, hi=40, unit="m",
+      doc="Clear trunk below the first limb at reference_age, scaled with age like height. As the "
+          "tree grows, limbs leaving the trunk below this line are shed (crown lifting). 0 = off"),
     P("architecture", "min_radius_for_mesh", 0.04, lo=0, hi=2, unit="m",
       doc="Mesh-order branches thinner than this at their base become curves"),
     # radii -----------------------------------------------------------------
@@ -78,6 +81,8 @@ SCHEMA: list[Param] = [
     P("radii", "trunk_flare", {"amount": 0.4, "height": 0.08}, "dict",
       doc="Base flare: amount (x radius) over height (fraction of tree height)"),
     P("radii", "junction_swell", 1.15, lo=1.0, hi=2.0, doc="Radius multiplier at bifurcations"),
+    P("radii", "trunk_thickness", 1.0, lo=0.3, hi=3.0,
+      doc="Trunk radius multiplier: full strength at the base, fading out toward the twigs"),
     # refinement ------------------------------------------------------------
     P("refinement", "smoothing", 0.5, lo=0, hi=1, doc="Chain smoothing before bending (removes colonization zig-zag)"),
     P("refinement", "gravity_droop", 0.45, lo=0, hi=3, doc="Sag scaled by downstreamMass"),

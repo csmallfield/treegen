@@ -23,6 +23,17 @@ def _segments(sk, axes):
 
 VIEWS = {"side": ([0, 1], "side (X)"), "front": ([2, 1], "front (Z)")}
 
+PERSON_X = 3.0          # metres from the trunk; the viewer stands its figure at the same spot
+
+
+def _person(ax, x=PERSON_X):
+    """A 1.8 m figure for scale: 1.55 m body plus a head."""
+    from matplotlib.patches import Circle, FancyBboxPatch
+    col = "#c8553d"
+    ax.add_patch(FancyBboxPatch((x - 0.2, 0.0), 0.4, 1.55, boxstyle="round,pad=0,rounding_size=0.15",
+                                color=col, lw=0, zorder=3))
+    ax.add_patch(Circle((x, 1.68), 0.12, color=col, lw=0, zorder=3))
+
 
 def render_png(sk, path, growth=None, mode="skeleton", title=None, size=6.0, extent=None,
                views=("side", "front"), half_width=None):
@@ -51,6 +62,7 @@ def render_png(sk, path, growth=None, mode="skeleton", title=None, size=6.0, ext
         else:
             colors = np.where(sk.dead[ib][:, None], [[0.55, 0.5, 0.45, 1]], [[0.18, 0.14, 0.1, 1]])
         ax.add_collection(LineCollection(segs, colors=colors, linewidths=lw, capstyle="round"))
+        _person(ax)
         ax.set_xlim(-W, W)
         ax.set_ylim(-0.02 * H, H * 1.08)
         ax.set_aspect("equal")
@@ -86,6 +98,7 @@ def contact_sheet(results, path, cols=None, cell=3.0):
         scale = 72 * cell / (2.2 * W)
         ax.add_collection(LineCollection(segs, colors="#2b2119", capstyle="round",
                                          linewidths=np.clip(2 * sk.radius[ib] * scale, 0.1, None)))
+        _person(ax)
         ax.set_xlim(-W, W)
         ax.set_ylim(0, H)
         ax.set_aspect("equal")

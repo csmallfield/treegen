@@ -279,6 +279,23 @@ had no effect on disk). Bump it whenever growth output changes for the same para
 and `docs/metrics/dod_baseline.json` were regenerated with it; the hard-envelope numbers
 are kept as `docs/metrics/dod_hard_envelope.json`. Pine and birch are still at 0.
 
+### First fork and trunk controls (2026-10-09)
+
+Photographed *Q. robur* fork higher than the sim did. Measured (`first_fork` in
+`scripts/dod_metrics.py`: lowest point where a live limb >= 30% of the stem's radius
+leaves it): open field 1.4 m at 80 y, 0.7 m at 20 y. Open-grown oaks typically keep
+2-5 m of clear trunk; photos skew higher still (browse lines on pasture trees, crown
+lifting in parks, photographers favouring landmark trees). Cause in the sim: the year-0
+envelope is already ~2.7 m tall with attractors all round the seedling, so it forks at
+once, and the model has no juvenile phase where low branches are later shed.
+`envelope.clear_height` does not fix it (first fork stays 1-1.7 m at 0.15-0.3).
+
+Added `architecture.bole_height` (crown lifting, tier 3) and `radii.trunk_thickness`
+(tier 2, live), both off by default; a 1.8 m figure 3 m from the trunk in the viewer
+and the PNGs. First fork at 80 y, open / dense / edge: off 1.4 / 7.3 / 1.4 m,
+bole 3 m 4.5 / 6.0 / 3.8 m, bole 5 m 6.0 / 6.3 / 5.8 m, with height and width nearly
+unchanged. The oak does not use it yet.
+
 ## 6. Working agreements from the session
 
 - Windows PowerShell is the environment; quote comma-separated CLI lists.

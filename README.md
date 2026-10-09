@@ -87,6 +87,9 @@ as each finishes: one side-view skeleton silhouette per seed, all framed by the 
 that age so heights compare directly. Click a tree to load its seed; Esc closes the grid.
 Expect roughly (seeds / cores) x one simulation.
 
+**Scale**: a 1.8 m figure stands 3 m from the trunk (display toggle *person*), and the
+PNG previews and contact sheets draw it at the same spot.
+
 **The HUD shows DBH**, the trunk diameter at 1.3 m. The radius at the very base of the trunk
 includes the root flare and reads about 1.4x larger.
 
@@ -176,9 +179,15 @@ Space inside a proxy counts as occupied: the tree cannot grow there.
    - Limbs whose best tip exposure falls below `shed_threshold` are shed. Big limbs
      leave dead stubs, and the shed limbs' pipes still count toward trunk thickness.
    - Old trees may die back at the top (reiteration).
+   - With `architecture.bole_height > 0`, limbs leaving the trunk below the lift line
+     (`bole_height` scaled with age like height) are shed and the bare trunk stops
+     sprouting: crown lifting, so young trees still carry low branches and lose them as
+     they grow. The trunk is re-derived each time as the heaviest path from the root, so
+     a limb that took over from a dead leader is never lifted off.
 4. **Extraction**: the continuation child at each fork is the heaviest subtree. In old
    trees, near-equal forks become co-dominant stems.
-5. **Radii and refinement**: pipe model, age-dependent trunk thickening, junction swell,
+5. **Radii and refinement**: pipe model, age-dependent trunk thickening,
+   `radii.trunk_thickness` (exact at the base, fading toward the twigs), junction swell,
    flare, chain smoothing, gravity droop by downstream mass, phototropism, noise.
 6. **Geometry and USD**: see `docs/USD_CONTRACT.md`.
 

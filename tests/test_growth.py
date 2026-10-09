@@ -82,3 +82,33 @@ def test_shade_response_leans_the_edge_tree_toward_the_clearing(small_oak):
     edge_pt = np.array([[env.radius_at(t) + 0.5 * ax, t * env.height, 0.0]])   # rim, clearing side
     mirrored = edge_pt * [-1, 1, 1]                                            # same point, stand side
     assert env.inside(edge_pt)[0] and not env.inside(mirrored)[0]             # the axis really moved
+
+
+def _with(params, group, **kw):
+    return {**params, group: {**params[group], **kw}}
+
+
+def test_bole_height_raises_the_first_fork(small_oak):
+    from treegen.metrics import tree_metrics
+    plain = tree_metrics(assemble_skeleton(grow(small_oak, Scene(), 5, 80), small_oak, 5))
+    p = _with(small_oak, "architecture", bole_height=4.0)
+    lifted = tree_metrics(assemble_skeleton(grow(p, Scene(), 5, 80), p, 5))
+    assert lifted["first_fork"] >= 4.0 > plain["first_fork"]
+    assert lifted["height"] > 0.8 * plain["height"]                 # the crown survives
+
+
+def test_bole_height_never_sheds_the_crown(small_oak):
+    """After the leader dies back the crown rides on a former side limb; lifting must follow it."""
+    edge = load_scene(ROOT / "scenes" / "forest_edge.toml")
+    p = _with(small_oak, "architecture", bole_height=5.0)
+    sk = assemble_skeleton(grow(p, edge, 42, 200), p, 42)
+    assert sk.height > 15.0
+
+
+def test_trunk_thickness_scales_the_trunk_not_the_twigs(small_oak):
+    g = grow(small_oak, Scene(), 5, 40)
+    a = assemble_skeleton(g, small_oak, 5)
+    p = _with(small_oak, "radii", trunk_thickness=1.5)
+    b = assemble_skeleton(g, p, 5)
+    assert abs(b.radius.max() / a.radius.max() - 1.5) < 1e-6
+    assert b.radius.min() / a.radius.min() < 1.1                    # twigs barely change

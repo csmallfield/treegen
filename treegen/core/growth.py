@@ -94,13 +94,15 @@ class _Nodes:
         self.shed_year = np.full(cap, -1.0, np.float32)
         self.shed_tips = np.zeros(cap, np.float32)
         self.vigor = np.ones(cap, np.float32)
+        self.stem = np.zeros(cap, bool)          # on the main stem: root plus first-child chain
 
     def _grow(self, need):
         cap = len(self.parent)
         if need <= cap:
             return
         new = max(need, cap * 2)
-        for k in ("pos", "parent", "birth", "state", "depth", "first_child", "nchild", "shed_year", "shed_tips", "vigor"):
+        for k in ("pos", "parent", "birth", "state", "depth", "first_child", "nchild", "shed_year", "shed_tips",
+                  "vigor", "stem"):
             a = getattr(self, k)
             fill = -1 if k in ("parent", "first_child", "shed_year") else (1 if k == "vigor" else 0)
             b = np.full((new,) + a.shape[1:], fill, a.dtype)
@@ -123,6 +125,9 @@ class _Nodes:
             np.add.at(self.nchild, pv, 1)
             no_first = self.first_child[pv] < 0
             self.first_child[pv[no_first]] = ids[valid][no_first]
+            # a stem node's first child is its extension (laterals only sprout once it has one)
+            kid = ids[valid]
+            self.stem[kid] = self.stem[pv] & (self.first_child[pv] == kid)
         self.n += m
         return ids
 
@@ -213,6 +218,8 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
 
     nodes = _Nodes()
     nodes.add(np.zeros((1, 3)), np.array([-1]), 0.0)
+    nodes.stem[0] = True
+    bole = A["bole_height"]
 
     # light grid bounds: tree's lifetime extent plus neighbours, clipped to a sane margin
     lo = np.array([-Rmax * 1.3, 0.0, -Rmax * 1.3])
@@ -228,13 +235,14 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
     total_iters = int(round(age * ipy))
     epoch_iters = max(1, int(round(L["epoch_years"] * ipy)))
     ang_mean, ang_var = A["branch_angle"]["mean"], A["branch_angle"]["var"]
-    stats = {"iterations": total_iters, "epochs": 0, "shed_nodes": 0, "bridged": 0, "reiterations": 0}
+    stats = {"iterations": total_iters, "epochs": 0, "shed_nodes": 0, "bridged": 0, "reiterations": 0, "lifted": 0}
     exposure_tip = None
 
     for it in range(1, total_iters + 1):
         year = it / ipy
         st = age_state(params, year)
         a_state[(a_state == A_WAITING) & (act_year <= year)] = A_ACTIVE
+        lift = bole * st.height_mult                # crown-lifting line this year (0 = off)
 
         # ---- light epoch: rebuild field, weight attractors, shed, reiterate ------------------
         if it % epoch_iters == 1 % epoch_iters:
@@ -254,6 +262,8 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
                 a_state[live] = A_ACTIVE
             nodes.vigor[: nodes.n] = _vigor(nodes, field_, st.apical_dominance)
             stats["shed_nodes"] += _shed(nodes, field_, st.shed_threshold, year, L["epoch_years"], L["stub_nodes"])
+            if lift > 0:
+                stats["lifted"] += _lift(nodes, lift, year)
             if st.reiteration > 0 and hash01(it, seed, 11) < st.reiteration * 0.5:
                 if _dieback(nodes, step):
                     stats["reiterations"] += 1
@@ -262,6 +272,10 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
         if len(active) == 0:
             continue
         growing = np.flatnonzero(nodes.state[: nodes.n] == ALIVE)
+        if lift > 0:
+            # the bare bole does not sprout: only its tip (the leader) keeps growing
+            bare = nodes.stem[growing] & (nodes.pos[growing, 1] < lift) & (nodes.first_child[growing] >= 0)
+            growing = growing[~bare]
         if len(growing) == 0:
             break
         tree = cKDTree(nodes.pos[growing])
@@ -409,6 +423,53 @@ def _shed(nodes: _Nodes, field_: LightField, thr: float, year: float, grace: flo
     nodes.shed_year[:n][shed] = year
     shed_count = int(shed.sum())
     return shed_count
+
+
+def _lift(nodes: _Nodes, lift: float, year: float) -> int:
+    """Crown lifting: shed every limb that leaves the main stem below `lift`.
+
+    The main stem is re-derived first as the heaviest path from the root (the same
+    continuation rule branch extraction uses), so after the old leader dies back the
+    limb now carrying the crown is the stem, never a side limb to be shed.
+    No stubs — the bole reads clean — but the limbs' tips still count toward the
+    trunk's pipe radius, since they thickened it while they lived.
+    """
+    n = nodes.n
+    par = nodes.parent[:n]
+    kept = nodes.state[:n] != SHED
+    levels = depth_levels(nodes.depth[:n])
+    tipcount = np.zeros(n, np.float32)
+    tipcount[_tips(nodes)] = 1.0
+    for lvl in reversed(levels[1:]):
+        lvl = lvl[kept[lvl]]
+        np.add.at(tipcount, par[lvl], tipcount[lvl])
+
+    order = np.argsort(par[1:], kind="stable") + 1
+    starts = np.searchsorted(par[order], np.arange(n))
+    ends = np.searchsorted(par[order], np.arange(n), side="right")
+    nodes.stem[:n] = False
+    k = 0
+    while True:
+        nodes.stem[k] = True
+        kids = order[starts[k]:ends[k]]
+        kids = kids[kept[kids]]
+        if len(kids) == 0:
+            break
+        k = int(kids[np.argmax(tipcount[kids])])
+
+    base = np.zeros(n, bool)
+    base[1:] = (nodes.stem[par[1:]] & ~nodes.stem[1:n] & (nodes.pos[par[1:], 1] < lift) & kept[1:])
+    if not base.any():
+        return 0
+    mark = base.copy()
+    for lvl in levels[1:]:
+        mark[lvl] |= mark[par[lvl]]
+    mark &= kept
+    b = np.flatnonzero(base)
+    np.add.at(nodes.shed_tips, par[b], tipcount[b])
+    nodes.state[:n][mark] = SHED
+    nodes.shed_year[:n][mark] = year
+    return int(mark.sum())
 
 
 def _vigor(nodes: _Nodes, field_: LightField, apical: float) -> np.ndarray:

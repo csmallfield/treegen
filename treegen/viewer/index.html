@@ -109,7 +109,8 @@
       <label>twigs</label><input type="checkbox" id="showTwig" checked></div>
     <div class="row"><label>skeleton</label><input type="checkbox" id="showSkel">
       <label>shed limbs</label><input type="checkbox" id="showShed"></div>
-    <div class="row"><label>ground grid</label><input type="checkbox" id="showGrid" checked></div>
+    <div class="row"><label>ground grid</label><input type="checkbox" id="showGrid" checked>
+      <label title="1.8 m tall, 3 m from the trunk">person (1.8 m)</label><input type="checkbox" id="showPerson" checked></div>
     <div class="row"><label>attractors</label><input type="checkbox" id="showAttr">
       <label>envelope</label><input type="checkbox" id="showEnv"></div>
     <div class="msg">attractors: grey = never reached, green = active, blue = consumed, red = shaded out</div>
@@ -139,6 +140,19 @@ controls.target.set(0, 9, 0);
 scene.add(new THREE.HemisphereLight(0xbcd3ff, 0x30281e, 2.1));
 const sun = new THREE.DirectionalLight(0xfff0d8, 2.0); sun.position.set(12, 26, 10); scene.add(sun);
 const grid = new THREE.GridHelper(80, 40, 0x39414c, 0x232931); scene.add(grid);
+
+// scale reference: a 1.8 m figure 3 m from the trunk (same spot as in the PNG previews)
+const person = new THREE.Group();
+{
+  const mat = new THREE.MeshStandardMaterial({ color: 0xc8553d, roughness: 0.8 });
+  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 1.15, 6, 16), mat);   // 1.55 m tall
+  body.position.y = 0.775;
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.12, 16, 12), mat);         // top at 1.80 m
+  head.position.y = 1.68;
+  person.add(body, head);
+  person.position.set(3, 0, 0);
+  scene.add(person);
+}
 
 // panel width: drag the splitter; remembered per browser
 const PANEL_KEY = "treegen.panelWidth";
@@ -304,6 +318,7 @@ function rebuild() {
     scene.add(objects.env);
   }
   grid.visible = $("showGrid").checked;
+  person.visible = $("showPerson").checked;
 
   $("hud").textContent =
     `${meta.scene}  seed ${meta.seed}  age ${meta.age}  ${meta.fast ? "[fast scrub]" : "[exact]"}\n` +
@@ -496,7 +511,7 @@ async function showVariants() {
   pair("seedR", "seedN", (released) => { if (released) generate(false); });
   pair("ageR", "ageN", (released) => generate(released ? !$("exact").checked : true));
   pair("lodR", "lodN", (released) => { if (released) generate(false); });
-  for (const id of ["mode", "showMesh", "showTwig", "showSkel", "showShed", "showGrid"]) $(id).onchange = rebuild;
+  for (const id of ["mode", "showMesh", "showTwig", "showSkel", "showShed", "showGrid", "showPerson"]) $(id).onchange = rebuild;
   for (const id of ["showAttr", "showEnv"]) $(id).onchange = () => generate(false);   // needs debug arrays
   $("regen").onclick = () => generate(false);
 

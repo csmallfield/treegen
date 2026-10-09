@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCENES = ["open_field", "dense_forest", "forest_edge"]
 AGES = [20.0, 80.0, 200.0]
-COLUMNS = ["height", "crown_base", "bole_fraction", "crown_width", "crown_offset_x", "dbh", "branches"]
+COLUMNS = ["height", "first_fork", "crown_base", "bole_fraction", "crown_width", "crown_offset_x", "dbh", "branches"]
 
 
 def _one(job):
@@ -70,7 +70,7 @@ def main(argv=None):
         for c in COLUMNS:
             v = m[c]
             cell = f"{v:.2f}" if isinstance(v, float) else str(v)
-            if base and key in base:
+            if base and key in base and c in base[key]:
                 d = v - base[key][c]
                 cell += f" ({d:+.2f})" if isinstance(v, float) else f" ({d:+d})"
             row += f"{cell:>16}"

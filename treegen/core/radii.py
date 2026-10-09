@@ -27,6 +27,8 @@ def shape_radii(ng: NodeGraph, br: Branches, r: np.ndarray, params: dict, st: Ag
     # age: thicken the trunk relative to height as the tree ages, fading out toward twigs
     m = st.trunk_radius_mult
     r *= 1.0 + (m - 1.0) * 0.5 * (r / rmax)
+    # user trunk thickness: exact at the thickest point, fading with radius toward the twigs
+    r *= 1.0 + (R["trunk_thickness"] - 1.0) * (r / r.max())
 
     # junction swell at bifurcations, feathered one node each way
     _, starts, ends = ng.children()
