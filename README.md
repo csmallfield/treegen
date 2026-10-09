@@ -52,7 +52,7 @@ treegen species/quercus.toml --age 80 -o out/oak.usda --watch
 # the same batch as numbers (height, crown base, crown width, lean, DBH), compared
 # against the recorded baseline; --set tries a parameter without editing the TOML
 python scripts/dod_metrics.py --compare docs/metrics/dod_baseline.json
-python scripts/dod_metrics.py --set envelope.shade_response=0.6 --compare docs/metrics/dod_baseline.json
+python scripts/dod_metrics.py --set envelope.shade_response=0.3 --compare docs/metrics/dod_baseline.json
 
 # interactive viewer in the browser
 treegen --serve
@@ -193,8 +193,9 @@ are applied as `curve(n) / curve(n_ref)`, so the species file is exactly true at
 ## Known limitations / next steps
 
 - **Envelope vs light**: the envelope caps height. `envelope.shade_response` lets a
-  shaded crown stretch taller and narrower and lean toward open sky (default 0, so
-  nothing changes until a species opts in); see `docs/HANDOFF.md` for the numbers.
+  shaded crown stretch taller and narrower and lean toward open sky (default 0; the oak
+  uses 0.6). `docs/metrics/dod_hard_envelope.json` holds the oak's numbers from before,
+  and `docs/HANDOFF.md` the comparison.
 - **Occasional looping limbs** in shaded crowns. Colonization still chases lit
   attractors around the crown shell; it is visible in the dense forest at 80 years.
 - **Scenes are identical at 20 years**: same-age neighbours have not closed canopy yet.

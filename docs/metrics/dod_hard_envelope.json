@@ -1,0 +1,88 @@
+{
+  "species": "quercus.toml",
+  "seed": 42,
+  "overrides": {},
+  "runs": {
+    "open_field/a20": {
+      "height": 8.697625270326995,
+      "dbh": 0.12658865865448996,
+      "crown_base": 1.9256966910327245,
+      "bole_fraction": 0.2214048813533589,
+      "crown_width": 9.891873380518437,
+      "crown_offset_x": -0.058503284135458127,
+      "branches": 151
+    },
+    "open_field/a80": {
+      "height": 21.252739270260303,
+      "dbh": 0.6771605666166375,
+      "crown_base": 4.874319320616988,
+      "bole_fraction": 0.2293501679304838,
+      "crown_width": 26.47238185386075,
+      "crown_offset_x": -0.07997880307734227,
+      "branches": 833
+    },
+    "open_field/a200": {
+      "height": 24.413094481688884,
+      "dbh": 1.5836742968703112,
+      "crown_base": 5.897439406522488,
+      "bole_fraction": 0.241568696297222,
+      "crown_width": 38.45878075464275,
+      "crown_offset_x": -0.3111072917567211,
+      "branches": 1283
+    },
+    "dense_forest/a20": {
+      "height": 8.733045446575474,
+      "dbh": 0.12457442809057798,
+      "crown_base": 2.073269640568493,
+      "bole_fraction": 0.2374051129416134,
+      "crown_width": 9.80112156642699,
+      "crown_offset_x": 0.011265069050577428,
+      "branches": 141
+    },
+    "dense_forest/a80": {
+      "height": 21.166951862615328,
+      "dbh": 0.552279083333799,
+      "crown_base": 6.429978419330355,
+      "bole_fraction": 0.30377441499675073,
+      "crown_width": 25.55296017895132,
+      "crown_offset_x": 0.019648999341998225,
+      "branches": 506
+    },
+    "dense_forest/a200": {
+      "height": 24.555818009902026,
+      "dbh": 1.087654805663107,
+      "crown_base": 6.916801655035877,
+      "bole_fraction": 0.28167669479577945,
+      "crown_width": 27.992760337762444,
+      "crown_offset_x": 0.20232782187343554,
+      "branches": 388
+    },
+    "forest_edge/a20": {
+      "height": 8.70951251810626,
+      "dbh": 0.12745047074842558,
+      "crown_base": 1.927618844970331,
+      "bole_fraction": 0.22132339105810941,
+      "crown_width": 9.739303659389845,
+      "crown_offset_x": -0.05329977163810803,
+      "branches": 151
+    },
+    "forest_edge/a80": {
+      "height": 20.874150964188264,
+      "dbh": 0.629367255945066,
+      "crown_base": 5.448322029563021,
+      "bole_fraction": 0.26100807831227113,
+      "crown_width": 26.262366935446174,
+      "crown_offset_x": 1.4068052882155002,
+      "branches": 669
+    },
+    "forest_edge/a200": {
+      "height": 24.080899011471843,
+      "dbh": 1.3901747839229994,
+      "crown_base": 6.9937172497386335,
+      "bole_fraction": 0.29042591999604805,
+      "crown_width": 38.32767039647811,
+      "crown_offset_x": 3.5347079200802893,
+      "branches": 758
+    }
+  }
+}

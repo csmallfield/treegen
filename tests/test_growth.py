@@ -45,9 +45,10 @@ def test_forest_sheds_more_than_open(small_oak):
 
 def test_shade_response_leaves_the_open_field_alone(small_oak):
     from treegen.core.growth import envelope_response
+    off = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 0.0}}
     p = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 1.0}}
     assert envelope_response(p, Scene())(80) == (1.0, (0.0, 0.0))
-    a = grow(small_oak, Scene(), 7, 30)
+    a = grow(off, Scene(), 7, 30)
     b = grow(p, Scene(), 7, 30)
     assert np.array_equal(a.pos, b.pos)
 
@@ -56,11 +57,12 @@ def test_shade_response_makes_a_forest_tree_taller_and_narrower(small_oak):
     from treegen.core.growth import envelope_response
     from treegen.metrics import tree_metrics
     forest = load_scene(ROOT / "scenes" / "dense_forest.toml")
+    off = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 0.0}}
     p = {**small_oak, "envelope": {**small_oak["envelope"], "shade_response": 0.6}}
     stretch, lean = envelope_response(p, forest)(80)
     assert stretch > 1.2                                  # the stand shades the crown's sides
     assert abs(lean[0]) < 0.05 and abs(lean[1]) < 0.05    # ...evenly, so no lean
-    plain = tree_metrics(assemble_skeleton(grow(small_oak, forest, 5, 80), small_oak, 5))
+    plain = tree_metrics(assemble_skeleton(grow(off, forest, 5, 80), off, 5))
     shaded = tree_metrics(assemble_skeleton(grow(p, forest, 5, 80), p, 5))
     assert shaded["height"] > plain["height"] * 1.15
     assert shaded["crown_base"] > plain["crown_base"]

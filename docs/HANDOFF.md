@@ -213,7 +213,7 @@ model implies.
 2. **Fast-scrub cache keyed to more than one parameter set.** Today any tier-3 edit
    invalidates it, so the next age drag pays for a full max-age simulation.
 3. **Envelope versus light** — the main open design question from the doc, deferred twice.
-   *Status 2026-10-09: first pass done, oak not re-tuned yet; see the note below the list.*
+   *Status 2026-10-09: done for the oak (shade_response = 0.6); see the note below the list.*
    The envelope caps height, so a forest tree cannot outgrow the stand and the bare bole
    stays shorter than it should be. Candidate: make the envelope a soft bias once the light
    field exists, rather than a hard cap. This changes silhouettes everywhere and will need
@@ -275,8 +275,9 @@ around 16 m at reference age, so the oak escapes above them and spreads.
 The disk cache file name now carries `CACHE_VERSION` (it did not before, so a bump
 had no effect on disk). Bump it whenever growth output changes for the same params.
 
-Open decision: what k the oak should use. Then regenerate the definition-of-done
-sheet and re-record `docs/metrics/dod_baseline.json`.
+**Adopted:** `quercus.toml` uses `shade_response = 0.6`. `docs/definition_of_done.png`
+and `docs/metrics/dod_baseline.json` were regenerated with it; the hard-envelope numbers
+are kept as `docs/metrics/dod_hard_envelope.json`. Pine and birch are still at 0.
 
 ## 6. Working agreements from the session
 
