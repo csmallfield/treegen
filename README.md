@@ -61,6 +61,19 @@ The viewer draws treegen's own arrays with three.js — it is not a Hydra viewpo
 `usd-core` wheel ships no imaging, so a real Hydra view means NVIDIA's prebuilt USD and
 its own Python. Use the viewer for tuning and usdview for verifying the USD itself.
 
+**The parameter panel is tiered by cost.** A coloured dot on each row says what a change
+invalidates: green = geometry only, amber = skeleton + geometry, red = a full simulation.
+Green and amber rows update live while you drag (about 50-100 ms round trip, because the
+simulation is reused from cache); red rows are debounced and re-simulate.
+
+**Debug views**: the display section can overlay the attractor cloud (grey = never reached,
+green = active, blue = consumed, red = shaded out), the crown envelope at the current age,
+and the skeleton and shed limbs. Attractors and envelope are only sent when their toggle is
+on, since the cloud adds about 1 MB.
+
+**Variant grid** renders nine seeds in worker processes and fills the grid as each finishes,
+skeleton silhouettes only. Expect roughly (seeds / cores) x one simulation.
+
 **The age slider has two modes.** Dragging runs a fast approximation: the tree is
 simulated once at `max_age` and truncated by birth year, which is ~50 ms per frame after
 the first simulation. Releasing re-runs the real simulation for that age when *exact on
@@ -103,7 +116,8 @@ treegen/
   usd/             stage (layers, primvars, subsets, materials)
   cli/             argparse entry point
   preview.py       silhouettes and contact sheets
-  viewer/          local server (stdlib http), binary payload packer, single-file three.js frontend
+  viewer/          local server (stdlib http), binary payload packer, parallel variant jobs,
+                   single-file three.js frontend
 species/           quercus (tuned), pinus and betula (untuned first passes)
 scenes/            open_field, dense_forest, forest_edge
 docs/USD_CONTRACT.md
@@ -167,7 +181,10 @@ are applied as `curve(n) / curve(n_ref)`, so the species file is exactly true at
   key per-curve lookdev off `primvars:branchOrder`.
 - **Frames**: the root frame seeds from world +X. It is stable under sim-scale tilts,
   not under arbitrary rotation of the whole skeleton.
-- **Viewer**: no Hydra, no curve editing (curves and lists are JSON text fields), and a
-  parameter change invalidates the fast-scrub cache, so the next drag pays for one full
-  simulation.
+- **Viewer**: no Hydra, no curve editing (curves and lists are JSON text fields), no light
+  field slice view, and a parameter change invalidates the fast-scrub cache, so the next
+  drag pays for one full simulation.
+- **Performance is single-threaded CPU**: numpy and scipy do all the work in one thread and
+  the GPU is used only to draw the viewport. Extra cores help batches and the variant grid,
+  not one tree.
 - **Not yet built**: junction welds, UsdSkel export, mesh/implicit envelopes.

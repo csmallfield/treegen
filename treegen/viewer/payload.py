@@ -35,7 +35,21 @@ def _line_segments(points, counts):
     return np.concatenate(segs).astype(np.uint32).reshape(-1) if segs else np.zeros(0, np.uint32)
 
 
-def pack(sk, geo, growth, meta: dict) -> bytes:
+def debug_arrays(growth, params, age):
+    """Attractor cloud and envelope wireframe — the two views that show why growth went where it did."""
+    from ..core.age import age_state
+    from ..core.envelope import Envelope
+    out = {}
+    if growth is not None and len(growth.attractors):
+        out["attr_pos"] = growth.attractors.astype(np.float32).reshape(-1)
+        out["attr_state"] = growth.attractor_state.astype(np.float32)
+    env = Envelope.at_age(params, age_state(params, age))
+    t = np.linspace(0.0, 1.0, 33)
+    out["env_profile"] = np.stack([t * env.height, env.radius_at(t)], 1).astype(np.float32).reshape(-1)
+    return out
+
+
+def pack(sk, geo, growth, meta: dict, extras: dict | None = None) -> bytes:
     arrays: dict[str, np.ndarray] = {}
 
     # meshes: trunk + branches merged, quads and triangles triangulated
@@ -86,6 +100,9 @@ def pack(sk, geo, growth, meta: dict) -> bytes:
             arrays["shed_pos"] = seg.reshape(-1)
         else:
             arrays["shed_pos"] = np.zeros(0, np.float32)
+
+    if extras:
+        arrays.update(extras)
 
     meta = dict(meta)
     meta["arrays"] = [{"name": k, "type": "u32" if v.dtype == np.uint32 else "f32", "length": int(v.size)}

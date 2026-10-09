@@ -26,10 +26,16 @@ from time import perf_counter
 from .. import __version__
 from ..core.growth import truncate
 from ..pipeline import Pipeline, assemble_skeleton
-from ..schema import GROUPS, SCHEMA, Scene, load_scene, load_species, validate
-from .payload import pack
+from ..schema import GROUPS, SCHEMA, STAGE_GROUPS, Scene, load_scene, load_species, validate
+from . import jobs
+from .payload import debug_arrays, pack
 
 HERE = Path(__file__).parent
+
+
+# 1 = geometry rebuild only, 2 = skeleton + geometry, 3 = full simulation.
+# Tiers 1 and 2 are a few tens of milliseconds, so the viewer updates them live while dragging.
+TIERS = {g: (1 if g in STAGE_GROUPS["geometry"] else 2 if g in STAGE_GROUPS["radii"] else 3) for g in GROUPS}
 
 
 def _schema_json():
@@ -80,12 +86,13 @@ class Session:
             else:
                 g, sk, geo = self.pipeline.geometry(params, scene, seed, age, lod)
 
+        extras = debug_arrays(g, params, age) if body.get("debug") else None
         meta = {"version": __version__, "age": age, "seed": seed, "fast": fast,
                 "scene": scene.name, "curves": int(sk.curve_count), "height": float(sk.height),
                 "trunk_radius": float(sk.radius[0]), "elapsed": perf_counter() - t0,
                 "stats": {k: v for k, v in g.stats.items() if isinstance(v, (int, float))},
                 "geo_stats": geo.stats}
-        return pack(sk, geo, g, meta)
+        return pack(sk, geo, g, meta, extras)
 
     def export(self, body):
         from ..usd.stage import write_tree
@@ -108,18 +115,10 @@ class Session:
         return {"path": str(path)}
 
     def variants(self, body):
-        from ..preview import contact_sheet
         params = validate(body["params"], "viewer")
-        scene = self._scene(body.get("scene"))
-        age = float(body.get("age", 80))
-        out = self.root / "out" / "variants.png"
-        results = []
-        with self.lock:
-            for seed in body.get("seeds", [1, 2, 3, 4, 5, 6, 7, 8, 9]):
-                _, sk = self.pipeline.skeleton(params, scene, int(seed), age)
-                results.append({"label": f"seed {seed}", "skeleton": sk})
-            contact_sheet(results, out)
-        return out.read_bytes()
+        seeds = body.get("seeds") or list(range(1, 10))
+        job = jobs.start(self.root, params, seeds, float(body.get("age", 80)), body.get("scene") or None)
+        return job.status()
 
 
 def to_toml(params: dict) -> str:
@@ -167,9 +166,18 @@ class Handler(BaseHTTPRequestHandler):
         if self.path in ("/", "/index.html"):
             return self._send(200, (HERE / "index.html").read_bytes(), "text/html; charset=utf-8")
         if self.path == "/api/bootstrap":
-            return self._send(200, {"version": __version__, "schema": _schema_json(),
+            return self._send(200, {"version": __version__, "schema": _schema_json(), "tiers": TIERS,
                                     "species": s.species_files(), "scenes": s.scene_files(),
                                     "root": str(s.root)})
+        if self.path.startswith("/api/variants/"):
+            parts = self.path.strip("/").split("/")[2:]
+            job = jobs.JOBS.get(parts[0])
+            if job is None:
+                return self._send(404, {"error": "unknown job"})
+            if len(parts) == 1:
+                return self._send(200, job.status())
+            png = job.images.get(int(parts[1]))
+            return self._send(200, png, "image/png") if png else self._send(404, {"error": "not ready"})
         if self.path.startswith("/api/species/"):
             name = self.path.rsplit("/", 1)[-1]
             try:
@@ -193,7 +201,7 @@ class Handler(BaseHTTPRequestHandler):
             if self.path == "/api/save":
                 return self._send(200, s.save_species(body))
             if self.path == "/api/variants":
-                return self._send(200, s.variants(body), "image/png")
+                return self._send(200, s.variants(body))
         except Exception as e:                            # noqa: BLE001
             import traceback
             traceback.print_exc()

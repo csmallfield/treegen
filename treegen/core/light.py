@@ -28,6 +28,41 @@ def hemisphere_dirs(n: int, sky_bias: float):
     return d, w / w.sum()
 
 
+_NB_CACHE: dict = {}
+
+
+def _neighbour_grid(bmin, vox, shape, neighbours, hscale):
+    """Rasterise neighbour proxies into a voxel grid, cached.
+
+    Proxies are static apart from the age scale, so this is recomputed only when the
+    grid or the (quantised) scale changes instead of once per light epoch.
+    """
+    key = (tuple(np.round(bmin, 4)), round(float(vox), 6), tuple(shape),
+           tuple((n.kind, n.a, n.b, n.radius, n.density, n.age_scaled) for n in neighbours),
+           round(float(hscale), 2))
+    hit = _NB_CACHE.get(key)
+    if hit is not None:
+        return hit
+    dens = np.zeros(tuple(shape), np.float32)
+    for nb in neighbours:
+        # only test voxels inside the proxy's own bounds, not the whole grid
+        s_ = hscale if nb.age_scaled else 1.0
+        lo, hi = neighbour_bounds([nb], hscale)
+        i0 = np.maximum(np.floor((lo - bmin) / vox).astype(int), 0)
+        i1 = np.minimum(np.ceil((hi - bmin) / vox).astype(int) + 1, shape)
+        if np.any(i1 <= i0):
+            continue
+        c = [bmin[k] + (np.arange(i0[k], i1[k]) + 0.5) * vox for k in range(3)]
+        X, Y, Z = np.meshgrid(*c, indexing="ij")
+        P = np.stack([X, Y, Z], -1).reshape(-1, 3)
+        inside = _inside(nb, P, s_).reshape(X.shape)
+        dens[i0[0]:i1[0], i0[1]:i1[1], i0[2]:i1[2]] += inside * nb.density
+    if len(_NB_CACHE) > 24:
+        _NB_CACHE.clear()
+    _NB_CACHE[key] = dens
+    return dens
+
+
 @dataclass
 class LightField:
     origin: np.ndarray      # (3,) min corner
@@ -52,12 +87,7 @@ class LightField:
         dens = np.zeros(shape, np.float32)
 
         if neighbours:
-            c = [bmin[k] + (np.arange(shape[k]) + 0.5) * vox for k in range(3)]
-            X, Y, Z = np.meshgrid(*c, indexing="ij")
-            P = np.stack([X, Y, Z], -1).reshape(-1, 3)
-            for nb in neighbours:
-                inside = _inside(nb, P, neighbour_height_scale if nb.age_scaled else 1.0)
-                dens.reshape(-1)[inside] += nb.density
+            dens = _neighbour_grid(bmin, vox, shape, neighbours, neighbour_height_scale).copy()
 
         if len(tips) and foliage_density > 0:
             idx = np.floor((tips - bmin) / vox).astype(int)

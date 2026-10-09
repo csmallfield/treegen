@@ -32,7 +32,13 @@
   .msg { color:var(--dim); margin-top:6px; word-break:break-all; }
   .msg.err { color:#e0714f; }
   .collapsed .body { display:none; }
-  #variants img { width:100%; margin-top:8px; border:1px solid var(--line); }
+  #variants { display:grid; grid-template-columns:repeat(3,1fr); gap:4px; margin-top:8px; }
+  #variants img { width:100%; border:1px solid var(--line); background:#fff; }
+  #variants .slot { aspect-ratio:1; border:1px dashed var(--line); border-radius:3px; }
+  .dot { flex:0 0 7px; height:7px; border-radius:50%; margin-right:2px; }
+  .t1 { background:#6fc98a; } .t2 { background:#e0b558; } .t3 { background:#d2563a; }
+  .legendkey { float:right; color:var(--dim); font-size:10px; }
+  #tierhelp { color:var(--dim); margin:-4px 0 8px; font-size:10px; }
 </style>
 <script type="importmap">
 { "imports": {
@@ -84,8 +90,12 @@
     <div class="row"><label>skeleton</label><input type="checkbox" id="showSkel">
       <label>shed limbs</label><input type="checkbox" id="showShed"></div>
     <div class="row"><label>ground grid</label><input type="checkbox" id="showGrid" checked></div>
+    <div class="row"><label>attractors</label><input type="checkbox" id="showAttr">
+      <label>envelope</label><input type="checkbox" id="showEnv"></div>
+    <div class="msg">attractors: grey = never reached, green = active, blue = consumed, red = shaded out</div>
   </div></fieldset>
 
+  <div id="tierhelp">● instant (geometry) &nbsp; ● fast (skeleton) &nbsp; ● needs a full simulation</div>
   <div id="params"></div>
 </div>
 
@@ -120,8 +130,12 @@ addEventListener("resize", resize); resize();
 
 // ---------------------------------------------------------------- state
 let schema = null, params = null, data = null;
-let objects = { mesh: null, twigs: null, skel: null, shed: null };
-let inflight = null, pending = false;
+let objects = { mesh: null, twigs: null, skel: null, shed: null, attr: null, env: null };
+let inflight = null, busyCount = 0, tiers = {};
+function busy(delta) {
+  busyCount = Math.max(0, busyCount + delta);
+  $("busy").style.display = busyCount ? "block" : "none";
+}
 
 function disposeAll() {
   for (const k in objects) {
@@ -211,6 +225,42 @@ function rebuild() {
     objects.shed = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0xd2563a, transparent: true, opacity: 0.25 }));
     scene.add(objects.shed);
   }
+  if (arr.attr_pos && $("showAttr").checked) {
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(arr.attr_pos, 3));
+    const st = arr.attr_state, col = new Float32Array(st.length * 3);
+    const PAL = [[0.35,0.35,0.38],[0.45,0.85,0.45],[0.35,0.55,0.95],[0.85,0.3,0.25]]; // waiting/active/consumed/dormant
+    for (let i = 0; i < st.length; i++) { const c = PAL[st[i]] || PAL[0];
+      col[i*3] = c[0]; col[i*3+1] = c[1]; col[i*3+2] = c[2]; }
+    g.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    objects.attr = new THREE.Points(g, new THREE.PointsMaterial({ size: 0.09, vertexColors: true,
+                                    transparent: true, opacity: 0.55 }));
+    scene.add(objects.attr);
+  }
+  if (arr.env_profile && $("showEnv").checked) {
+    const prof = arr.env_profile, rings = 9, seg = 48, pts = [];
+    const n = prof.length / 2;
+    const sample = (i) => ({ y: prof[i*2], r: prof[i*2+1] });
+    for (let k = 0; k < rings; k++) {                   // horizontal rings
+      const i = Math.round(k * (n - 1) / (rings - 1)), { y, r } = sample(i);
+      for (let j = 0; j < seg; j++) {
+        const a = 2*Math.PI*j/seg, b = 2*Math.PI*(j+1)/seg;
+        pts.push(Math.cos(a)*r, y, Math.sin(a)*r, Math.cos(b)*r, y, Math.sin(b)*r);
+      }
+    }
+    for (let j = 0; j < 8; j++) {                        // vertical profile lines
+      const a = 2*Math.PI*j/8;
+      for (let i = 0; i < n - 1; i++) {
+        const p0 = sample(i), p1 = sample(i+1);
+        pts.push(Math.cos(a)*p0.r, p0.y, Math.sin(a)*p0.r, Math.cos(a)*p1.r, p1.y, Math.sin(a)*p1.r);
+      }
+    }
+    const g = new THREE.BufferGeometry();
+    g.setAttribute("position", new THREE.BufferAttribute(new Float32Array(pts), 3));
+    objects.env = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x4f7fa8,
+                                         transparent: true, opacity: 0.3 }));
+    scene.add(objects.env);
+  }
   grid.visible = $("showGrid").checked;
 
   $("hud").textContent =
@@ -222,14 +272,15 @@ function rebuild() {
 
 // ---------------------------------------------------------------- generate
 async function generate(fast) {
-  if (inflight) { pending = true; inflight.abort(); }
+  if (inflight) inflight.abort();
   const ctrl = new AbortController(); inflight = ctrl;
-  $("busy").style.display = "block";
+  busy(+1);
   try {
     const r = await fetch("/api/generate", {
       method: "POST", signal: ctrl.signal,
       body: JSON.stringify({ params, seed: +$("seedN").value, age: +$("ageN").value,
-                             scene: $("scene").value || null, lod: +$("lodN").value, fast })
+                             scene: $("scene").value || null, lod: +$("lodN").value, fast,
+                             debug: $("showAttr").checked || $("showEnv").checked })
     });
     if (!r.ok) { msg((await r.json()).error, true); return; }
     data = unpack(await r.arrayBuffer());
@@ -238,19 +289,24 @@ async function generate(fast) {
   } catch (e) {
     if (e.name !== "AbortError") msg(String(e), true);
   } finally {
-    inflight = null;
-    $("busy").style.display = pending ? "block" : "none";
-    if (pending) { pending = false; }
+    if (inflight === ctrl) inflight = null;
+    busy(-1);
   }
 }
 
 // ---------------------------------------------------------------- parameter panel
 function paramRow(group, p) {
+  const tier = tiers[group] || 3;
   const row = document.createElement("div"); row.className = "row";
+  const dot = document.createElement("span"); dot.className = "dot t" + tier;
+  dot.title = tier === 1 ? "geometry only — updates live"
+            : tier === 2 ? "skeleton + geometry — updates live"
+            : "needs a full simulation";
+  row.appendChild(dot);
   const lab = document.createElement("label"); lab.textContent = p.name;
   lab.title = (p.doc || "") + (p.unit ? ` [${p.unit}]` : "");
   row.appendChild(lab);
-  const set = (v) => { params[group][p.name] = v; scheduleParamRegen(); };
+  const set = (v) => { params[group][p.name] = v; scheduleParamRegen(tier); };
 
   if (p.kind === "float" || p.kind === "int") {
     const lo = p.lo ?? 0, hi = p.hi ?? (params[group][p.name] * 4 || 1);
@@ -258,7 +314,12 @@ function paramRow(group, p) {
     r.min = lo; r.max = hi; r.step = p.kind === "int" ? 1 : (hi - lo) / 200;
     const n = document.createElement("input"); n.type = "number"; n.step = r.step;
     r.value = n.value = params[group][p.name];
-    r.oninput = () => { n.value = r.value; set(p.kind === "int" ? +r.value | 0 : +r.value); };
+    r.oninput = () => {
+      n.value = r.value;
+      params[group][p.name] = p.kind === "int" ? +r.value | 0 : +r.value;
+      if (tier < 3) scheduleParamRegen(tier);            // live while dragging
+    };
+    r.onchange = () => { n.value = r.value; set(p.kind === "int" ? +r.value | 0 : +r.value); };
     n.onchange = () => { r.value = n.value; set(p.kind === "int" ? +n.value | 0 : +n.value); };
     row.append(r, n);
   } else if (p.kind === "dict") {
@@ -270,7 +331,7 @@ function paramRow(group, p) {
       const sl = document.createElement("label"); sl.textContent = "  " + k; sub.appendChild(sl);
       const n = document.createElement("input"); n.type = "number"; n.step = 0.01;
       n.value = params[group][p.name][k];
-      n.onchange = () => { params[group][p.name][k] = +n.value; scheduleParamRegen(); };
+      n.onchange = () => { params[group][p.name][k] = +n.value; scheduleParamRegen(tier); };
       sub.appendChild(n); wrap.appendChild(sub);
     }
     row.appendChild(wrap);
@@ -292,6 +353,9 @@ function buildPanel() {
   for (const [group, plist] of Object.entries(schema)) {
     const fs = document.createElement("fieldset");
     const lg = document.createElement("legend"); lg.textContent = group;
+    const key = document.createElement("span"); key.className = "legendkey";
+    key.textContent = ["", "live", "live", "resim"][tiers[group] || 3];
+    lg.appendChild(key);
     const body = document.createElement("div"); body.className = "body";
     lg.onclick = () => fs.classList.toggle("collapsed");
     if (["age_response", "materials", "geometry"].includes(group)) fs.classList.add("collapsed");
@@ -301,9 +365,9 @@ function buildPanel() {
 }
 
 let paramTimer = null;
-function scheduleParamRegen() {
+function scheduleParamRegen(tier = 3) {
   clearTimeout(paramTimer);
-  paramTimer = setTimeout(() => generate(false), 350);
+  paramTimer = setTimeout(() => generate(false), tier < 3 ? 40 : 350);
 }
 
 // ---------------------------------------------------------------- wiring
@@ -325,7 +389,7 @@ async function loadSpecies(name) {
 
 (async function init() {
   const boot = await (await fetch("/api/bootstrap")).json();
-  schema = boot.schema;
+  schema = boot.schema; tiers = boot.tiers || {};
   $("version").textContent = boot.version;
   for (const s of boot.species) $("species").add(new Option(s, s));
   $("scene").add(new Option("open field (none)", ""));
@@ -337,6 +401,7 @@ async function loadSpecies(name) {
   pair("ageR", "ageN", (released) => generate(released ? !$("exact").checked : true));
   pair("lodR", "lodN", (released) => { if (released) generate(false); });
   for (const id of ["mode", "showMesh", "showTwig", "showSkel", "showShed", "showGrid"]) $(id).onchange = rebuild;
+  for (const id of ["showAttr", "showEnv"]) $(id).onchange = () => generate(false);   // needs debug arrays
   $("regen").onclick = () => generate(false);
 
   $("export").onclick = async () => {
@@ -354,13 +419,24 @@ async function loadSpecies(name) {
     msg(r.ok ? "saved " + j.path : j.error, !r.ok);
   };
   $("variantsBtn").onclick = async () => {
-    msg("rendering 9 variants (skeletons only)…");
+    const seeds = [1,2,3,4,5,6,7,8,9];
     const r = await fetch("/api/variants", { method: "POST", body: JSON.stringify(
-      { params, age: +$("ageN").value, scene: $("scene").value || null, seeds: [1,2,3,4,5,6,7,8,9] }) });
-    if (!r.ok) { msg((await r.json()).error, true); return; }
-    const url = URL.createObjectURL(await r.blob());
-    $("variants").innerHTML = `<img src="${url}">`;
-    msg("");
+      { params, age: +$("ageN").value, scene: $("scene").value || null, seeds }) });
+    const start = await r.json();
+    if (!r.ok) { msg(start.error, true); return; }
+    $("variants").innerHTML = seeds.map((s) => `<div class="slot" id="slot${s}"></div>`).join("");
+    const shown = new Set();
+    msg(`variants: 0 / ${seeds.length}`);
+    const poll = setInterval(async () => {
+      const st = await (await fetch("/api/variants/" + start.id)).json();
+      for (const s of st.ready) {
+        if (shown.has(s)) continue;
+        shown.add(s);
+        $("slot" + s).outerHTML = `<img id="slot${s}" src="/api/variants/${start.id}/${s}" title="seed ${s}">`;
+      }
+      msg(`variants: ${st.ready.length} / ${seeds.length}` + (st.errors.length ? "  " + st.errors[0] : ""));
+      if (st.done) { clearInterval(poll); if (!st.errors.length) msg(""); }
+    }, 700);
   };
 
   await loadSpecies(boot.species.includes("quercus.toml") ? "quercus.toml" : boot.species[0]);
