@@ -397,6 +397,35 @@ raises shed_threshold to 0.3, leaving a shell on top. That is the next problem: 
 old-tree crown model, not the limbs. Candidate settings to try in the viewer are in
 `out/straight/quercus_straight.toml` (untracked).
 
+### Old crowns (2026-10-09, open)
+
+Ablation on the experimental oak (pruning + straightening) at 200 y, open field
+(scratch ablation script; variants as --set style overrides):
+- Pruning and bud lifetime are what empty the crown: either off brings the first fork
+  from 10.4 m back to 5.0 m.
+- Cause: self-pruning compared a side branch with its sibling, so big scaffold limbs
+  (100 tips) were pruned for losing to the trunk's continuation (1000 tips). Added
+  `light.prune_max_diameter` (only thinner side branches are self-pruned; big limbs are
+  left to light shedding). At 6 cm: first fork 5.0 m, inner sticks 3.5 m, crown base
+  ~10 m on a 26 m tree (the winter photo starts its limbs at ~1/3 height).
+- `growth.epicormic` (old wood may still sprout): refills the lower crown but brings the
+  short even branching back (inner sticks ~1.5 m); the two goals pull against each other.
+- Large loops (5-10 m) remain at 200 y. They come from growth, not gravity droop (8 m
+  window sinuosity p90 1.76 with droop, 1.69 without; the approved oak is 1.50).
+  Mechanism: straight limbs run out to the envelope, find no attractors beyond, and
+  have to turn back along it; with max_turn they do so in slow arcs. Tried: a tip that
+  would need > 3x max_turn stops instead of arcing (an elbow). 3 m sinuosity improves
+  (p90 1.29-1.32, better than the approved oak) but 8 m stays 1.76-1.81, and branch
+  counts halve.
+
+All of this is committed with defaults off (the stop rule only acts when max_turn > 0);
+the approved oak is unchanged (checked: identical metrics). Age 80 with these settings
+is the best match to the winter photo so far. Age 200 still loops: space colonization
+inside a fixed envelope gives straight limbs nowhere to go once the interior is pruned.
+Candidate next directions: let the envelope soften/grow at its top edge for old trees,
+or move old-age crown behaviour into a different growth rule (e.g. sympodial/
+reiteration-driven renewal from the scaffold rather than tips chasing attractors).
+
 ## 6. Working agreements from the session
 
 - Windows PowerShell is the environment; quote comma-separated CLI lists.

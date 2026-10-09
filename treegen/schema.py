@@ -73,6 +73,9 @@ SCHEMA: list[Param] = [
     P("growth", "max_turn", 0.0, lo=0, hi=90, unit="deg",
       doc="Most a growing shoot may turn per step; direction changes sharper than this only happen "
           "at forks (elbows). Stops limbs looping back on themselves. 0 = unlimited"),
+    P("growth", "epicormic", 0.0, lo=0, hi=1,
+      doc="Chance per step that wood past bud_years sprouts anyway (dormant buds in old bark), "
+          "so old crowns can refill where light reaches. 0 = never"),
     P("growth", "trunk_bias", 0.0, lo=0, hi=1,
       doc="Extra vertical bias on the leader only (conifers)"),
     # architecture ----------------------------------------------------------
@@ -117,6 +120,9 @@ SCHEMA: list[Param] = [
     P("light", "prune_share", 0.0, lo=0, hi=0.5,
       doc="Self-pruning: a side branch carrying less than this share of its strongest sibling's tips "
           "is shed once it is prune_age old. Leaves long runs between real forks. 0 = off"),
+    P("light", "prune_max_diameter", 0.0, lo=0, hi=1.0, unit="m",
+      doc="Only side branches thinner than this (pipe-model diameter) are self-pruned; big limbs "
+          "are left to light shedding. 0 = no limit"),
     P("light", "prune_age", 10.0, lo=1, hi=100, unit="years",
       doc="Side branches younger than this are never self-pruned (keeps the twig clumps at the edge)"),
     # geometry --------------------------------------------------------------

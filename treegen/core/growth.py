@@ -284,7 +284,11 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
             if lift > 0:
                 stats["lifted"] += _lift(nodes, lift, year)
             if L["prune_share"] > 0:
-                stats["pruned"] += _self_prune(nodes, L["prune_share"], L["prune_age"], year)
+                max_tips = np.inf
+                if L["prune_max_diameter"] > 0:              # diameter -> tip count via the pipe model
+                    R_ = params["radii"]
+                    max_tips = (L["prune_max_diameter"] / (2 * R_["tip_radius"])) ** R_["pipe_exponent"]
+                stats["pruned"] += _self_prune(nodes, L["prune_share"], L["prune_age"], year, max_tips)
             if A["max_unbranched"] > 0:
                 stats["stalled"] += _stall(nodes, A["max_unbranched"], params["radii"])
             if st.reiteration > 0 and hash01(it, seed, 11) < st.reiteration * 0.5:
@@ -299,6 +303,10 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
             # tips may always extend; wood older than bud_years has no buds left to break,
             # so side branches only start near the growing edge and pruned ones stay gone
             old = (nodes.first_child[growing] >= 0) & (nodes.birth[growing] < year - G["bud_years"])
+            if G["epicormic"] > 0:
+                # dormant buds in old bark still break now and then (epicormic shoots); the
+                # attractor light weighting decides whether they have anywhere to go
+                old &= hash01(growing * 7919 + it, seed, 17) >= G["epicormic"]
             growing = growing[~old]
         if lift > 0:
             # the bare bole does not sprout: only its tip (the leader) keeps growing
@@ -348,9 +356,14 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
             dirs[src == lead] += G["trunk_bias"] * 2.0 * UP
         dirs = normalize(dirs)
         dirs = _enforce_branch_angle(nodes, src, dirs, ang_mean, ang_var, seed, A["branch_angle_max"])
+        keep = np.ones(len(src), bool)
         if G["max_turn"] > 0 and ext.any():
-            # a growing shoot curves gently; sharp direction changes belong to forks
+            # a growing shoot curves gently; sharp direction changes belong to forks. A tip
+            # that would have to turn more than 3x max_turn stops instead of arcing round
+            # (the arcs made loops at the crown edge); a side shoot takes over, an elbow.
             heading = normalize(nodes.pos[src[ext]] - nodes.pos[nodes.parent[src[ext]]])
+            want = np.arccos(np.clip((dirs[ext] * heading).sum(1), -1, 1))
+            keep[np.flatnonzero(ext)[want > 3 * math.radians(G["max_turn"])]] = False
             dirs[ext] = _limit_turn(heading, dirs[ext], math.radians(G["max_turn"]))
         if G["centrifugal"] > 0:
             dirs = _centrifugal(nodes.pos[src], dirs, G["centrifugal"])
@@ -358,6 +371,9 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
         dirs[:, 1] = np.maximum(dirs[:, 1], -0.2)
         dirs = normalize(dirs)
 
+        src, dirs = src[keep], dirs[keep]
+        if len(src) == 0:
+            continue
         new = nodes.pos[src] + dirs * step
         dn, _ = tree.query(new, k=1)
         ok = dn > 0.3 * step            # no near-duplicate nodes
@@ -462,7 +478,7 @@ def _shed(nodes: _Nodes, field_: LightField, thr: float, year: float, grace: flo
     return shed_count
 
 
-def _self_prune(nodes: _Nodes, share: float, min_age: float, year: float) -> int:
+def _self_prune(nodes: _Nodes, share: float, min_age: float, year: float, max_tips: float = np.inf) -> int:
     """Shed side branches that keep losing to their siblings; returns nodes shed.
 
     A real limb grows many side shoots and most are starved by stronger siblings and
@@ -492,8 +508,9 @@ def _self_prune(nodes: _Nodes, share: float, min_age: float, year: float) -> int
     np.maximum.at(best, par[ch], tipcount[ch])
     base = np.zeros(n, bool)
     lateral = nodes.first_child[par[ch]] != ch        # a limb's own leader is never pruned
+    small = tipcount[ch] < max_tips                    # big limbs are left to light shedding
     base[ch] = ((tipcount[ch] < share * best[par[ch]]) & (nodes.birth[ch] <= year - min_age)
-                & ~nodes.stem[ch] & lateral)
+                & ~nodes.stem[ch] & lateral & small)
     if not base.any():
         return 0
     mark = base.copy()
