@@ -326,6 +326,16 @@ cache key now includes a hash of the growth sources (`pipeline.CODE_HASH`), afte
 stale cache served old-code trees twice. Open field 200 y runs ~30 s (20 s without the
 whip rule).
 
+### Thin branches carrying many (2026-10-09)
+
+Reported in 3D: a thin branch holding up 20 others. The radii were fine (no branch
+under 3 cm carries 10 or more others; the loaded ones are 7-13 cm in radius). They were
+order 2, and only orders 0-1 were meshed, so the viewer drew 20 cm limbs as 1-pixel
+lines. The oak now meshes every order (`geometry.mesh_orders = [0, 1, 2, 3, 4]`) and
+`min_radius_for_mesh` (4 cm) alone decides tube versus curve: ~30k faces at 80 y, ~70k at
+200 y, geometry rebuild 0.1-0.2 s. USD contract unchanged (it already defines
+Branches by `mesh_orders` plus the radius test). Other species still mesh orders 0-1.
+
 ## 6. Working agreements from the session
 
 - Windows PowerShell is the environment; quote comma-separated CLI lists.

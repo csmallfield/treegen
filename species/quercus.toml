@@ -46,7 +46,7 @@ grid_resolution = 64
 foliage_density = 2.0
 
 [geometry]
-mesh_orders = [0, 1]
+mesh_orders = [0, 1, 2, 3, 4]   # every limb >= min_radius_for_mesh is a tube, whatever its order
 radial_segments = { min = 6, max = 24 }
 
 [materials]
