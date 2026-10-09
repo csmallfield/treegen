@@ -130,3 +130,13 @@ def test_max_unbranched_stops_whips(small_oak):
 def test_growth_cache_key_tracks_the_code():
     from treegen.pipeline import CODE_HASH
     assert len(CODE_HASH) == 8
+
+
+def test_self_pruning_with_bud_lifetime_lengthens_inner_wood(small_oak):
+    from treegen.metrics import tree_metrics
+    off = _with(_with(small_oak, "light", prune_share=0.0), "growth", bud_years=0.0)
+    on = _with(_with(small_oak, "light", prune_share=0.3), "growth", bud_years=2.0)
+    a = tree_metrics(assemble_skeleton(grow(off, Scene(), 42, 120), off, 42))
+    b = tree_metrics(assemble_skeleton(grow(on, Scene(), 42, 120), on, 42))
+    assert b["stick_inner"] > 1.5 * a["stick_inner"]
+    assert b["branches"] < a["branches"]

@@ -251,7 +251,7 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
     epoch_iters = max(1, int(round(L["epoch_years"] * ipy)))
     ang_mean, ang_var = A["branch_angle"]["mean"], A["branch_angle"]["var"]
     stats = {"iterations": total_iters, "epochs": 0, "shed_nodes": 0, "bridged": 0, "reiterations": 0, "lifted": 0,
-             "stalled": 0}
+             "stalled": 0, "pruned": 0}
     exposure_tip = None
 
     for it in range(1, total_iters + 1):
@@ -283,6 +283,8 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
                                          tip_light)
             if lift > 0:
                 stats["lifted"] += _lift(nodes, lift, year)
+            if L["prune_share"] > 0:
+                stats["pruned"] += _self_prune(nodes, L["prune_share"], L["prune_age"], year)
             if A["max_unbranched"] > 0:
                 stats["stalled"] += _stall(nodes, A["max_unbranched"], params["radii"])
             if st.reiteration > 0 and hash01(it, seed, 11) < st.reiteration * 0.5:
@@ -293,6 +295,11 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
         if len(active) == 0:
             continue
         growing = np.flatnonzero((nodes.state[: nodes.n] == ALIVE) & ~nodes.stalled[: nodes.n])
+        if G["bud_years"] > 0:
+            # tips may always extend; wood older than bud_years has no buds left to break,
+            # so side branches only start near the growing edge and pruned ones stay gone
+            old = (nodes.first_child[growing] >= 0) & (nodes.birth[growing] < year - G["bud_years"])
+            growing = growing[~old]
         if lift > 0:
             # the bare bole does not sprout: only its tip (the leader) keeps growing
             bare = nodes.stem[growing] & (nodes.pos[growing, 1] < lift) & (nodes.first_child[growing] >= 0)
@@ -446,6 +453,48 @@ def _shed(nodes: _Nodes, field_: LightField, thr: float, year: float, grace: flo
     nodes.shed_year[:n][shed] = year
     shed_count = int(shed.sum())
     return shed_count
+
+
+def _self_prune(nodes: _Nodes, share: float, min_age: float, year: float) -> int:
+    """Shed side branches that keep losing to their siblings; returns nodes shed.
+
+    A real limb grows many side shoots and most are starved by stronger siblings and
+    drop off; the survivors are the widely spaced forks of a winter oak. Shedding by
+    absolute darkness alone keeps them, since their tips sit at the lit crown edge.
+    So at each fork, a child carrying less than `share` of the tips of its strongest
+    sibling is shed once it is `min_age` years old. Young twigs at the edge are below
+    that age, so they stay in clumps. Their tips still count toward the parent's pipe
+    radius, as for any shed limb.
+    """
+    n = nodes.n
+    par = nodes.parent[:n]
+    alive = nodes.state[:n] == ALIVE
+    tips = _tips(nodes)
+    if len(tips) < 2:
+        return 0
+    levels = depth_levels(nodes.depth[:n])
+    tipcount = np.zeros(n)
+    tipcount[tips] = 1.0
+    for lvl in reversed(levels[1:]):
+        lvl = lvl[alive[lvl]]
+        np.add.at(tipcount, par[lvl], tipcount[lvl])
+    ch = np.flatnonzero(alive[1:]) + 1
+    best = np.zeros(n)
+    np.maximum.at(best, par[ch], tipcount[ch])
+    base = np.zeros(n, bool)
+    base[ch] = ((tipcount[ch] < share * best[par[ch]]) & (nodes.birth[ch] <= year - min_age)
+                & ~nodes.stem[ch])
+    if not base.any():
+        return 0
+    mark = base.copy()
+    for lvl in levels[1:]:
+        mark[lvl] |= mark[par[lvl]]
+    mark &= alive
+    b = np.flatnonzero(base)
+    np.add.at(nodes.shed_tips, par[b], tipcount[b])
+    nodes.state[:n][mark] = SHED
+    nodes.shed_year[:n][mark] = year
+    return int(mark.sum())
 
 
 def _stall(nodes: _Nodes, run10: float, R: dict) -> int:

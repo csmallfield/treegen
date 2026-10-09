@@ -64,6 +64,9 @@ SCHEMA: list[Param] = [
     P("growth", "iterations_per_year", 2, "int", lo=1, hi=50,
       doc="Colonization iterations run per simulated year"),
     P("growth", "straightness", 0.3, lo=0, hi=3, doc="Heading memory on tip extension; stops limbs tracing the lit shell"),
+    P("growth", "bud_years", 0.0, lo=0, hi=50, unit="years",
+      doc="Side buds only break on wood younger than this; older wood stays bare and only tips extend. "
+          "With prune_share, stops pruned side branches simply regrowing. 0 = any wood can sprout"),
     P("growth", "trunk_bias", 0.0, lo=0, hi=1,
       doc="Extra vertical bias on the leader only (conifers)"),
     # architecture ----------------------------------------------------------
@@ -102,6 +105,11 @@ SCHEMA: list[Param] = [
     P("light", "ray_count", 24, "int", lo=4, hi=128, doc="Hemisphere directions per exposure sample"),
     P("light", "epoch_years", 5.0, lo=0.5, hi=50, unit="years", doc="Light field rebuild + shed interval"),
     P("light", "stub_nodes", 2, "int", lo=0, hi=10, doc="Nodes kept as dead stubs when a branch is shed"),
+    P("light", "prune_share", 0.0, lo=0, hi=0.5,
+      doc="Self-pruning: a side branch carrying less than this share of its strongest sibling's tips "
+          "is shed once it is prune_age old. Leaves long runs between real forks. 0 = off"),
+    P("light", "prune_age", 10.0, lo=1, hi=100, unit="years",
+      doc="Side branches younger than this are never self-pruned (keeps the twig clumps at the edge)"),
     # geometry --------------------------------------------------------------
     P("geometry", "mesh_orders", [0, 1], "list", doc="Branch orders swept as meshes; others become BasisCurves"),
     P("geometry", "radial_segments", {"min": 6, "max": 24}, "dict", doc="Adaptive ring resolution"),

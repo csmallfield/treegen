@@ -336,6 +336,32 @@ lines. The oak now meshes every order (`geometry.mesh_orders = [0, 1, 2, 3, 4]`)
 200 y, geometry rebuild 0.1-0.2 s. USD contract unchanged (it already defines
 Branches by `mesh_orders` plus the radius test). Other species still mesh orders 0-1.
 
+### Winter-oak branching: long inner runs, clumped edge (2026-10-09, in progress)
+
+Reference: `reference/quercus_robur_winter.jpg` (user's photo, untracked). A winter oak
+has long bare runs on its scaffold limbs and short clustered branching at the crown
+edge; the sim forked evenly everywhere. Measured with `stick_inner` / `stick_mid` in
+dod_metrics (median wood length between visible forks, i.e. splits into children that
+each carry 2+ tips; inner = carries 30+ tips): the oak had ~1.0 m inner and 1.2-1.6 m
+middle, longer outside than inside, the reverse of the photo. (A first per-branch
+side-branch-gap measure was misleading: it counted twigs and stubs; removed.)
+
+Tried and measured on the definition-of-done batch:
+- `growth.bud_years` alone (old wood cannot sprout side branches): little effect.
+- kill_radius 3-4x, attractor_count 10000: sparser tree, spacing unchanged; colonization
+  sprouts a lateral every few nodes behind any tip whatever the density.
+- `light.prune_share` alone (shed side branches with < share of their strongest
+  sibling's tips once `prune_age` old): pruned shoots simply regrow from the same wood.
+- Both together work. At 0.3 / 2 y: inner sticks 2.2-4.6 m (2-4x), height and width
+  within ~1 m, whips ~0, edge lean kept, DBH back near earlier values with
+  trunk_thickness 1.0.
+
+Both settings are committed with defaults off; the oak file does NOT use them yet.
+Reason: at 200 y the crowns turn umbrella-like (interior emptied) and scaffold limbs show
+wavy S-curves and loops that the interior twigs used to hide. Real oak limbs run fairly
+straight between elbow kinks. Next: fix limb tortuosity, then decide the oak values,
+then the planned geometry-stage twig-cluster pass (tufts below the 0.35 m node spacing).
+
 ## 6. Working agreements from the session
 
 - Windows PowerShell is the environment; quote comma-separated CLI lists.

@@ -44,6 +44,8 @@ def tree_metrics(sk) -> dict:
             slender.append(ld)
             whips += ld > 150
 
+    stick_inner, stick_mid = _sticks(sk)
+
     lp = pts[live]
     rad = np.hypot(lp[:, 0], lp[:, 2])
     crown = lp[lp[:, 1] >= base] if (lp[:, 1] >= base).any() else lp
@@ -58,4 +60,60 @@ def tree_metrics(sk) -> dict:
         "branches": int(sk.curve_count),
         "whips": int(whips),
         "limb_ld_p95": float(np.percentile(slender, 95)) if slender else 0.0,
+        "stick_inner": stick_inner,
+        "stick_mid": stick_mid,
     }
+
+
+def _sticks(sk):
+    """Median length of wood between visible forks: (inner, middle).
+
+    A visible fork splits into two or more children that each carry 2+ tips. Inner
+    sticks carry 30+ tips (scaffold wood), middle ones 5-29. A winter oak has long
+    inner sticks and short outer ones; colonization alone gives roughly even spacing.
+    """
+    P = len(sk.points)
+    par = np.full(P, -1)
+    alias = np.zeros(P, bool)                    # first point of a lateral = its attach point
+    for c in range(sk.curve_count):
+        a, b = sk.offsets[c], sk.offsets[c + 1]
+        par[a + 1:b] = np.arange(a, b - 1)
+        if c > 0:
+            alias[a] = True
+            if b - a > 1:
+                par[a + 1] = sk.parent_point[c]
+    nkids = np.zeros(P, int)
+    real = np.flatnonzero((par >= 0) & ~alias)
+    np.add.at(nkids, par[real], 1)
+    tc = ((nkids == 0) & ~alias).astype(float)
+    for i in real[::-1]:                         # curves are parents-first: children come later
+        tc[par[i]] += tc[i]
+    seglen = np.zeros(P)
+    seglen[real] = np.linalg.norm(sk.points[real] - sk.points[par[real]], axis=1)
+    big = np.zeros(P, int)
+    np.add.at(big, par[real], (tc[real] >= 2).astype(int))
+    fork = big >= 2
+    order = np.argsort(par[real], kind="stable")
+    kids_sorted = real[order]
+    starts = np.searchsorted(par[kids_sorted], np.arange(P))
+    ends = np.searchsorted(par[kids_sorted], np.arange(P), side="right")
+
+    inner, mid = [], []
+    stack = [int(sk.offsets[0])]
+    while stack:
+        k = stack.pop()
+        carried, length = tc[k], 0.0
+        while not fork[k]:
+            kids = kids_sorted[starts[k]:ends[k]]
+            if len(kids) == 0:
+                break
+            k = int(kids[np.argmax(tc[kids])])
+            length += seglen[k]
+        if fork[k] and length > 0:
+            (inner if carried >= 30 else mid if carried >= 5 else []).append(length)
+        if fork[k]:
+            for c in kids_sorted[starts[k]:ends[k]]:
+                if tc[c] >= 2:
+                    stack.append(int(c))
+    med = lambda v: float(np.median(v)) if v else 0.0           # noqa: E731
+    return med(inner), med(mid)
