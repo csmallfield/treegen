@@ -70,6 +70,10 @@ SCHEMA: list[Param] = [
     P("architecture", "branch_angle", {"mean": 48.0, "var": 12.0}, "dict", unit="deg",
       doc="Minimum divergence between a lateral and its sibling continuation"),
     P("architecture", "max_order", 4, "int", lo=0, hi=12, doc="Branches above this order are pruned at extraction"),
+    P("architecture", "max_unbranched", 0.0, lo=0, hi=30, unit="m",
+      doc="Longest a 10 cm thick limb may grow past its last real fork; thicker limbs may run further, "
+          "as diameter^(2/3) (elastic similarity). An overlong tip stops until the limb forks, which "
+          "stops whips. The main stem is exempt. 0 = off"),
     P("architecture", "bole_height", 0.0, lo=0, hi=40, unit="m",
       doc="Clear trunk below the first limb at reference_age, scaled with age like height. As the "
           "tree grows, limbs leaving the trunk below this line are shed (crown lifting). 0 = off"),

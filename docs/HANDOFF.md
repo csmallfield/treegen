@@ -297,6 +297,35 @@ bole 3 m 4.5 / 6.0 / 3.8 m, bole 5 m 6.0 / 6.3 / 5.8 m, with height and width ne
 unchanged. **Adopted:** `quercus.toml` uses `bole_height = 3.0` (trunk_thickness stays 1);
 the definition-of-done sheet and `docs/metrics/dod_baseline.json` were regenerated with it.
 
+### Whips: long thin limbs (2026-10-09)
+
+Reported: very long thin branches, mostly low in the crown, that could not hold
+themselves up. Measured: 11-20 m limbs with 5-9 cm bases (length/diameter 180-250,
+median ~70) and only 1-5 side branches each, some near-vertical. Elastic similarity
+(diameter ~ length^1.5) puts a 20 m limb at roughly 30-60 cm.
+
+Radii-only fixes were tried and reverted: a length^1.5 thickness floor along the path
+inflated the trunk to 2.5 m DBH at 80 y; the same floor on horizontal lever arm missed
+the vertical whips and still inflated old trunks. The limbs were whips, so thickening
+them alone would make poles.
+
+Kept: `architecture.max_unbranched` (growth, `_stall` in core/growth.py). A tip whose
+run since its limb's last real fork (smaller side >= 15% of the larger's tips) exceeds
+`max_unbranched x (D / 0.1 m)^(2/3)` leaves the growing set until the limb forks. Run
+and limit are carried per node as it is added and recomputed exactly each epoch;
+checking only per epoch let tips overshoot ~3.5 m and left a slenderness floor.
+Oak: `max_unbranched = 4.0` with `trunk_thickness = 0.8` (the better-branched crown has
+more tips, which thickened the trunk through the pipe sums). Whips per tree went from
+18-79 to 0-5; p95 limb length/diameter from 160-200 to ~95-130; height, width, bole
+and DBH within about 10%; edge lean a little weaker (2.9 m vs 3.4 m at 200 y).
+`whips` and `limb_ld_p95` are now dod_metrics columns.
+
+Also: light sampling no longer bounds-tests every ray sample (zero-padded grid) and
+vigor/shedding share one tip sample per epoch, bit-identical results; the growth disk
+cache key now includes a hash of the growth sources (`pipeline.CODE_HASH`), after a
+stale cache served old-code trees twice. Open field 200 y runs ~30 s (20 s without the
+whip rule).
+
 ## 6. Working agreements from the session
 
 - Windows PowerShell is the environment; quote comma-separated CLI lists.

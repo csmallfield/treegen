@@ -108,8 +108,25 @@ def test_bole_height_never_sheds_the_crown(small_oak):
 
 def test_trunk_thickness_scales_the_trunk_not_the_twigs(small_oak):
     g = grow(small_oak, Scene(), 5, 40)
-    a = assemble_skeleton(g, small_oak, 5)
+    one = _with(small_oak, "radii", trunk_thickness=1.0)
+    a = assemble_skeleton(g, one, 5)
     p = _with(small_oak, "radii", trunk_thickness=1.5)
     b = assemble_skeleton(g, p, 5)
     assert abs(b.radius.max() / a.radius.max() - 1.5) < 1e-6
     assert b.radius.min() / a.radius.min() < 1.1                    # twigs barely change
+
+
+
+def test_max_unbranched_stops_whips(small_oak):
+    from treegen.metrics import tree_metrics
+    off = _with(small_oak, "architecture", max_unbranched=0.0)
+    on = _with(small_oak, "architecture", max_unbranched=4.0)
+    a = tree_metrics(assemble_skeleton(grow(off, Scene(), 42, 120), off, 42))
+    b = tree_metrics(assemble_skeleton(grow(on, Scene(), 42, 120), on, 42))
+    assert b["limb_ld_p95"] < 0.85 * a["limb_ld_p95"]           # limbs fork before they whip
+    assert abs(b["height"] - a["height"]) < 0.1 * a["height"]    # without reshaping the tree
+
+
+def test_growth_cache_key_tracks_the_code():
+    from treegen.pipeline import CODE_HASH
+    assert len(CODE_HASH) == 8

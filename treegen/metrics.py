@@ -31,6 +31,19 @@ def tree_metrics(sk) -> dict:
         if sk.radius[a + 1] >= 0.3 * sk.radius[pp]:
             first_fork = min(first_fork, float(pts[pp, 1]))
 
+    # whips: limbs over 3 m long and more than 150x their base diameter, which wood
+    # could not hold up (a self-supporting limb thickens as length^1.5)
+    whips, slender = 0, []
+    for c in np.flatnonzero(sk.order >= 1):
+        a, b = sk.offsets[c], sk.offsets[c + 1]
+        if b - a < 3:
+            continue
+        length = sk.arc_length[b - 1] - sk.arc_length[a]
+        if length > 3.0:
+            ld = length / (2 * sk.radius[a + 1])
+            slender.append(ld)
+            whips += ld > 150
+
     lp = pts[live]
     rad = np.hypot(lp[:, 0], lp[:, 2])
     crown = lp[lp[:, 1] >= base] if (lp[:, 1] >= base).any() else lp
@@ -43,4 +56,6 @@ def tree_metrics(sk) -> dict:
         "crown_width": float(2 * np.percentile(rad, 99)) if len(rad) else 0.0,
         "crown_offset_x": float(crown[:, 0].mean()) if len(crown) else 0.0,
         "branches": int(sk.curve_count),
+        "whips": int(whips),
+        "limb_ld_p95": float(np.percentile(slender, 95)) if slender else 0.0,
     }

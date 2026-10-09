@@ -184,6 +184,10 @@ Space inside a proxy counts as occupied: the tree cannot grow there.
      sprouting: crown lifting, so young trees still carry low branches and lose them as
      they grow. The trunk is re-derived each time as the heaviest path from the root, so
      a limb that took over from a dead leader is never lifted off.
+   - With `architecture.max_unbranched > 0`, a tip whose run since its limb's last
+     real fork exceeds `max_unbranched x (D / 10 cm)^(2/3)` (D from the pipe model) stops
+     until the limb forks. Without it, colonization grows whips: 20 m limbs 8 cm thick
+     with one or two side branches, which no wood could hold up. The main stem is exempt.
 4. **Extraction**: the continuation child at each fork is the heaviest subtree. In old
    trees, near-equal forks become co-dominant stems.
 5. **Radii and refinement**: pipe model, age-dependent trunk thickening,

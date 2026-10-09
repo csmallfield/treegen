@@ -25,7 +25,25 @@ from .core.refine import refine
 from .core.skeleton import Branches, build_graph, extract_branches
 from .schema import STAGE_GROUPS, Scene, group_hash, scene_key
 
-CACHE_VERSION = 2          # bump whenever growth output changes for the same parameters
+CACHE_VERSION = 3          # bump whenever growth output changes for the same parameters
+
+
+def _code_hash() -> str:
+    """Hash of the source the growth stage runs, part of every growth cache key.
+
+    The disk cache is keyed on parameters, so after a code change the same parameters
+    used to hit results from the old code (it happened twice). Hashing the sources
+    makes any edit to them invalidate the cache with nobody having to remember.
+    """
+    import hashlib
+    core = Path(__file__).parent / "core"
+    h = hashlib.sha1()
+    for name in ("growth.py", "light.py", "envelope.py", "age.py", "util.py"):
+        h.update((core / name).read_bytes().replace(b"\r\n", b"\n"))   # same hash on any checkout
+    return h.hexdigest()[:8]
+
+
+CODE_HASH = _code_hash()
 
 
 @dataclass
@@ -111,12 +129,12 @@ class Pipeline:
             print(f"\r\033[K  {msg}", flush=True)
 
     def growth(self, params: dict, scene: Scene, seed: int, age: float, progress=None) -> GrowthResult:
-        key = ("growth", CACHE_VERSION, group_hash(params, STAGE_GROUPS["skeleton"],
+        key = ("growth", f"{CACHE_VERSION}-{CODE_HASH}", group_hash(params, STAGE_GROUPS["skeleton"],
                                                     [seed, age, scene_key(scene)]))
         if key in self._mem:
             self._log("growth: memory cache hit")
             return self._mem[key]
-        path = self.cache_dir / f"growth-v{CACHE_VERSION}-{key[2]}.npz" if self.cache_dir else None
+        path = self.cache_dir / f"growth-v{key[1]}-{key[2]}.npz" if self.cache_dir else None
         if path and path.exists():
             self._log(f"growth: disk cache hit ({path.name})")
             res = GrowthResult.from_npz(path)

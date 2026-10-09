@@ -95,6 +95,10 @@ class _Nodes:
         self.shed_tips = np.zeros(cap, np.float32)
         self.vigor = np.ones(cap, np.float32)
         self.stem = np.zeros(cap, bool)          # on the main stem: root plus first-child chain
+        self.stalled = np.zeros(cap, bool)       # tip outran its support; waits for the limb to fork
+        self.run = np.zeros(cap)                 # path length since the limb's last real fork
+        self.limit = np.full(cap, np.inf)        # longest run the limb's thickness allows
+        self.new_limit = np.inf                  # limit for a fresh one-tip lateral (set by grow)
 
     def _grow(self, need):
         cap = len(self.parent)
@@ -102,9 +106,10 @@ class _Nodes:
             return
         new = max(need, cap * 2)
         for k in ("pos", "parent", "birth", "state", "depth", "first_child", "nchild", "shed_year", "shed_tips",
-                  "vigor", "stem"):
+                  "vigor", "stem", "stalled", "run", "limit"):
             a = getattr(self, k)
             fill = -1 if k in ("parent", "first_child", "shed_year") else (1 if k == "vigor" else 0)
+            fill = np.inf if k == "limit" else fill
             b = np.full((new,) + a.shape[1:], fill, a.dtype)
             b[: self.n] = a[: self.n]
             setattr(self, k, b)
@@ -127,7 +132,14 @@ class _Nodes:
             self.first_child[pv[no_first]] = ids[valid][no_first]
             # a stem node's first child is its extension (laterals only sprout once it has one)
             kid = ids[valid]
-            self.stem[kid] = self.stem[pv] & (self.first_child[pv] == kid)
+            ext = self.first_child[pv] == kid
+            self.stem[kid] = self.stem[pv] & ext
+            # support bookkeeping between epochs (_stall recomputes it exactly): an
+            # extension continues its limb's run, a new lateral starts its own
+            seg = np.linalg.norm(self.pos[kid] - self.pos[pv], axis=1)
+            self.run[kid] = np.where(ext, self.run[pv], 0.0) + seg
+            self.limit[kid] = np.where(ext, self.limit[pv], self.new_limit)
+            self.stalled[kid] = (self.run[kid] > self.limit[kid]) & ~self.stem[kid]
         self.n += m
         return ids
 
@@ -220,6 +232,9 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
     nodes.add(np.zeros((1, 3)), np.array([-1]), 0.0)
     nodes.stem[0] = True
     bole = A["bole_height"]
+    if A["max_unbranched"] > 0:
+        R_ = params["radii"]
+        nodes.new_limit = A["max_unbranched"] * (2 * R_["tip_radius"] / 0.1) ** (2.0 / 3.0)
 
     # light grid bounds: tree's lifetime extent plus neighbours, clipped to a sane margin
     lo = np.array([-Rmax * 1.3, 0.0, -Rmax * 1.3])
@@ -235,7 +250,8 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
     total_iters = int(round(age * ipy))
     epoch_iters = max(1, int(round(L["epoch_years"] * ipy)))
     ang_mean, ang_var = A["branch_angle"]["mean"], A["branch_angle"]["var"]
-    stats = {"iterations": total_iters, "epochs": 0, "shed_nodes": 0, "bridged": 0, "reiterations": 0, "lifted": 0}
+    stats = {"iterations": total_iters, "epochs": 0, "shed_nodes": 0, "bridged": 0, "reiterations": 0, "lifted": 0,
+             "stalled": 0}
     exposure_tip = None
 
     for it in range(1, total_iters + 1):
@@ -260,10 +276,15 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
                 # the lit shell of the envelope). Hollowing is the shed pass's job.
                 a_weight[live] = np.maximum(e, 0.02)
                 a_state[live] = A_ACTIVE
-            nodes.vigor[: nodes.n] = _vigor(nodes, field_, st.apical_dominance)
-            stats["shed_nodes"] += _shed(nodes, field_, st.shed_threshold, year, L["epoch_years"], L["stub_nodes"])
+            tips = _tips(nodes)                       # vigor and shedding read the same tip light
+            tip_light = (tips, field_.sample(nodes.pos[tips])[0])
+            nodes.vigor[: nodes.n] = _vigor(nodes, field_, st.apical_dominance, tip_light)
+            stats["shed_nodes"] += _shed(nodes, field_, st.shed_threshold, year, L["epoch_years"], L["stub_nodes"],
+                                         tip_light)
             if lift > 0:
                 stats["lifted"] += _lift(nodes, lift, year)
+            if A["max_unbranched"] > 0:
+                stats["stalled"] += _stall(nodes, A["max_unbranched"], params["radii"])
             if st.reiteration > 0 and hash01(it, seed, 11) < st.reiteration * 0.5:
                 if _dieback(nodes, step):
                     stats["reiterations"] += 1
@@ -271,7 +292,7 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
         active = np.flatnonzero(a_state == A_ACTIVE)
         if len(active) == 0:
             continue
-        growing = np.flatnonzero(nodes.state[: nodes.n] == ALIVE)
+        growing = np.flatnonzero((nodes.state[: nodes.n] == ALIVE) & ~nodes.stalled[: nodes.n])
         if lift > 0:
             # the bare bole does not sprout: only its tip (the leader) keeps growing
             bare = nodes.stem[growing] & (nodes.pos[growing, 1] < lift) & (nodes.first_child[growing] >= 0)
@@ -363,12 +384,14 @@ def _build_field(params, scene, nodes, lo, hi, hscale):
                             L["foliage_density"], L["ray_count"], L["sky_bias"], hscale)
 
 
-def _shed(nodes: _Nodes, field_: LightField, thr: float, year: float, grace: float, stub_nodes: int) -> int:
+def _shed(nodes: _Nodes, field_: LightField, thr: float, year: float, grace: float, stub_nodes: int,
+          tip_light=None) -> int:
     n = nodes.n
-    tips = _tips(nodes)
+    tips, e = tip_light if tip_light is not None else (_tips(nodes), None)
     if len(tips) < 2:
         return 0
-    e, _ = field_.sample(nodes.pos[tips])
+    if e is None:
+        e, _ = field_.sample(nodes.pos[tips])
     best = np.full(n, -1.0, np.float32)
     best[tips] = e
     tipcount = np.zeros(n, np.float32)
@@ -425,6 +448,58 @@ def _shed(nodes: _Nodes, field_: LightField, thr: float, year: float, grace: flo
     return shed_count
 
 
+def _stall(nodes: _Nodes, run10: float, R: dict) -> int:
+    """Stop tips that have outrun what their limb could hold up; returns how many.
+
+    Space colonization will let one shoot chase scattered attractors for 20 m with
+    barely a side branch, and the pipe model then makes that whip as thin as its few
+    tips say. A real shoot that long loses its lead and side shoots take over. So
+    each tip's run, the path length back to its limb's last real fork (the smaller
+    side carries at least 15% of the larger side's tips), may not exceed
+    run10 * (D / 0.1 m)^(2/3), with D the pipe-model diameter of that run. A tip
+    over the limit leaves the growing set until the next epoch; the attractors it
+    was chasing go to the nearest other node, usually on the same limb, which forks
+    it. The main stem is exempt: height growth is not limited by this.
+    """
+    n = nodes.n
+    par = nodes.parent[:n]
+    alive = nodes.state[:n] == ALIVE
+    nodes.stalled[:n] = False
+    tips = _tips(nodes)
+    if len(tips) < 2:
+        return 0
+    levels = depth_levels(nodes.depth[:n])
+    tipcount = np.zeros(n)
+    tipcount[tips] = 1.0
+    for lvl in reversed(levels[1:]):
+        lvl = lvl[alive[lvl]]
+        np.add.at(tipcount, par[lvl], tipcount[lvl])
+
+    ch = np.flatnonzero(alive[1:]) + 1
+    big = np.zeros(n)
+    tot = np.zeros(n)
+    np.maximum.at(big, par[ch], tipcount[ch])
+    np.add.at(tot, par[ch], tipcount[ch])
+    fork = (tot - big) >= 0.15 * big                  # a side worth calling a fork
+    fork &= tot > big                                  # ...and at least two live children
+
+    diam = 2 * R["tip_radius"] * np.power(np.maximum(tipcount, 1.0), 1.0 / R["pipe_exponent"])
+    seg = np.zeros(n)
+    seg[1:] = np.linalg.norm(nodes.pos[1:n] - nodes.pos[par[1:]], axis=1)
+    run = np.zeros(n)
+    thick = np.full(n, diam[0])
+    for lvl in levels[1:]:
+        p = par[lvl]
+        run[lvl] = np.where(fork[p], 0.0, run[p]) + seg[lvl]
+        thick[lvl] = np.where(fork[p], diam[lvl], thick[p])
+
+    limit = run10 * np.power(thick / 0.1, 2.0 / 3.0)
+    nodes.run[:n], nodes.limit[:n] = run, limit
+    over = tips[(run[tips] > limit[tips]) & ~nodes.stem[tips]]
+    nodes.stalled[over] = True
+    return len(over)
+
+
 def _lift(nodes: _Nodes, lift: float, year: float) -> int:
     """Crown lifting: shed every limb that leaves the main stem below `lift`.
 
@@ -472,7 +547,7 @@ def _lift(nodes: _Nodes, lift: float, year: float) -> int:
     return int(mark.sum())
 
 
-def _vigor(nodes: _Nodes, field_: LightField, apical: float) -> np.ndarray:
+def _vigor(nodes: _Nodes, field_: LightField, apical: float, tip_light=None) -> np.ndarray:
     """Borchert-Honda style allocation (after Palubicki et al. 2009), simplified.
 
     Light collected at tips flows to the root; the root's resource is handed back
@@ -482,12 +557,13 @@ def _vigor(nodes: _Nodes, field_: LightField, apical: float) -> np.ndarray:
     fall into deeper shade and are shed — which is what makes a forest bole.
     """
     n = nodes.n
-    tips = _tips(nodes)
+    tips, e = tip_light if tip_light is not None else (_tips(nodes), None)
     out = np.ones(n, np.float32)
     if len(tips) < 2:
         return out
     alive = nodes.state[:n] == ALIVE
-    e, _ = field_.sample(nodes.pos[tips])
+    if e is None:
+        e, _ = field_.sample(nodes.pos[tips])
     Q = np.zeros(n)
     Q[tips] = e + 1e-4
     ntip = np.zeros(n)

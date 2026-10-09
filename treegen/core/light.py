@@ -115,18 +115,22 @@ class LightField:
         step = 1.25 * vox
         steps = int(min(max_steps, np.ceil(diag / step)))
         t = (1.0 + np.arange(steps)) * step          # skip the sample's own voxel
-        flat = self.density.reshape(-1)
-        strides = np.array([shape[1] * shape[2], shape[2], 1])
+        # a zero border around the grid: clamping an index into it reads 0, exactly what a
+        # sample outside the grid contributes, without a per-sample bounds test
+        if getattr(self, "_padded", None) is None:
+            self._padded = np.pad(self.density, 1).reshape(-1)
+        flat = self._padded
+        hi = (shape + 1).astype(np.int32)
+        strides = np.array([(shape[1] + 2) * (shape[2] + 2), shape[2] + 2, 1], np.int32)
         D, W = self.dirs.astype(np.float32), self.weights.astype(np.float32)
 
         for s in range(0, n, chunk):
             p = pts[s:s + chunk].astype(np.float32)
             q = p[:, None, None, :] + D[None, :, None, :] * t[None, None, :, None].astype(np.float32)
-            idx = np.floor((q - self.origin.astype(np.float32)) / vox).astype(np.int32)
-            ok = np.all((idx >= 0) & (idx < shape), axis=-1)
+            idx = np.floor((q - self.origin.astype(np.float32)) / vox).astype(np.int32) + 1
+            np.clip(idx, 0, hi, out=idx)
             lin = (idx * strides).sum(-1)
-            lin[~ok] = 0
-            tau = np.where(ok, flat[lin], 0.0).sum(-1) * step    # (m, K)
+            tau = flat[lin].sum(-1) * step                       # (m, K)
             T = np.exp(-tau)
             expo[s:s + chunk] = (T * W).sum(-1)
             v = (T * W)[..., None] * D[None]

@@ -21,7 +21,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCENES = ["open_field", "dense_forest", "forest_edge"]
 AGES = [20.0, 80.0, 200.0]
-COLUMNS = ["height", "first_fork", "crown_base", "bole_fraction", "crown_width", "crown_offset_x", "dbh", "branches"]
+COLUMNS = ["height", "first_fork", "crown_base", "bole_fraction", "crown_width", "crown_offset_x", "dbh", "branches",
+           "whips", "limb_ld_p95"]
 
 
 def _one(job):

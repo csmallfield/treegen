@@ -24,6 +24,7 @@ iterations_per_year = 2
 branch_angle = { mean = 48, var = 12 }
 max_order = 4
 bole_height = 3.0          # clear trunk below the first limb at reference age (crown lifting)
+max_unbranched = 4.0       # no whips: a limb must fork before it outgrows its thickness
 min_radius_for_mesh = 0.04
 
 [radii]
@@ -31,6 +32,7 @@ pipe_exponent = 2.3
 tip_radius = 0.01
 trunk_flare = { amount = 0.4, height = 0.08 }
 junction_swell = 1.15
+trunk_thickness = 0.8      # offsets the heavier pipe sums of the better-branched crown
 
 [refinement]
 smoothing = 0.6
