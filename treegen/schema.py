@@ -67,11 +67,20 @@ SCHEMA: list[Param] = [
     P("growth", "bud_years", 0.0, lo=0, hi=50, unit="years",
       doc="Side buds only break on wood younger than this; older wood stays bare and only tips extend. "
           "With prune_share, stops pruned side branches simply regrowing. 0 = any wood can sprout"),
+    P("growth", "centrifugal", 0.0, lo=0, hi=1,
+      doc="Crowns grow outward: 1 = new wood never heads back toward the trunk axis, 0 = free. "
+          "Stops edge shoots hooking back into a crown that pruning has emptied"),
+    P("growth", "max_turn", 0.0, lo=0, hi=90, unit="deg",
+      doc="Most a growing shoot may turn per step; direction changes sharper than this only happen "
+          "at forks (elbows). Stops limbs looping back on themselves. 0 = unlimited"),
     P("growth", "trunk_bias", 0.0, lo=0, hi=1,
       doc="Extra vertical bias on the leader only (conifers)"),
     # architecture ----------------------------------------------------------
     P("architecture", "branch_angle", {"mean": 48.0, "var": 12.0}, "dict", unit="deg",
       doc="Minimum divergence between a lateral and its sibling continuation"),
+    P("architecture", "branch_angle_max", 0.0, lo=0, hi=175, unit="deg",
+      doc="Largest divergence a new side branch may take from its parent's continuation; stops side "
+          "branches sprouting backwards toward the trunk. 0 = no limit"),
     P("architecture", "max_order", 4, "int", lo=0, hi=12, doc="Branches above this order are pruned at extraction"),
     P("architecture", "max_unbranched", 0.0, lo=0, hi=30, unit="m",
       doc="Longest a 10 cm thick limb may grow past its last real fork; thicker limbs may run further, "

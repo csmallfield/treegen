@@ -347,9 +347,16 @@ def grow(params: dict, scene: Scene, seed: int, age: float, progress=None) -> Gr
             lead = _leader_tip(nodes)
             dirs[src == lead] += G["trunk_bias"] * 2.0 * UP
         dirs = normalize(dirs)
-        dirs[:, 1] = np.maximum(dirs[:, 1], -0.2)       # gravitropism: wood does not grow downhill
+        dirs = _enforce_branch_angle(nodes, src, dirs, ang_mean, ang_var, seed, A["branch_angle_max"])
+        if G["max_turn"] > 0 and ext.any():
+            # a growing shoot curves gently; sharp direction changes belong to forks
+            heading = normalize(nodes.pos[src[ext]] - nodes.pos[nodes.parent[src[ext]]])
+            dirs[ext] = _limit_turn(heading, dirs[ext], math.radians(G["max_turn"]))
+        if G["centrifugal"] > 0:
+            dirs = _centrifugal(nodes.pos[src], dirs, G["centrifugal"])
+        # gravitropism last, so nothing after it can point wood downhill
+        dirs[:, 1] = np.maximum(dirs[:, 1], -0.2)
         dirs = normalize(dirs)
-        dirs = _enforce_branch_angle(nodes, src, dirs, ang_mean, ang_var, seed)
 
         new = nodes.pos[src] + dirs * step
         dn, _ = tree.query(new, k=1)
@@ -461,8 +468,10 @@ def _self_prune(nodes: _Nodes, share: float, min_age: float, year: float) -> int
     A real limb grows many side shoots and most are starved by stronger siblings and
     drop off; the survivors are the widely spaced forks of a winter oak. Shedding by
     absolute darkness alone keeps them, since their tips sit at the lit crown edge.
-    So at each fork, a child carrying less than `share` of the tips of its strongest
-    sibling is shed once it is `min_age` years old. Young twigs at the edge are below
+    So at each fork, a side branch carrying less than `share` of the tips of its
+    strongest sibling is shed once it is `min_age` years old. A limb's own leader (its
+    first child) is never pruned: pruning leaders made limbs out of successive side
+    branches, each turning the same way, and the limbs spiralled. Young twigs at the edge are below
     that age, so they stay in clumps. Their tips still count toward the parent's pipe
     radius, as for any shed limb.
     """
@@ -482,8 +491,9 @@ def _self_prune(nodes: _Nodes, share: float, min_age: float, year: float) -> int
     best = np.zeros(n)
     np.maximum.at(best, par[ch], tipcount[ch])
     base = np.zeros(n, bool)
+    lateral = nodes.first_child[par[ch]] != ch        # a limb's own leader is never pruned
     base[ch] = ((tipcount[ch] < share * best[par[ch]]) & (nodes.birth[ch] <= year - min_age)
-                & ~nodes.stem[ch])
+                & ~nodes.stem[ch] & lateral)
     if not base.any():
         return 0
     mark = base.copy()
@@ -680,8 +690,52 @@ def _bridge(nodes, start, target, infl, step, apical, year):
         k = int(nodes.add((p + d * step)[None], np.array([k]), year)[0])
 
 
-def _enforce_branch_angle(nodes, src, dirs, mean_deg, var_deg, seed):
-    """Laterals diverge from their sibling continuation by at least a sampled branch angle."""
+def _centrifugal(pos, dirs, strength):
+    """Crowns grow outward: cap how fast new wood may head back toward the trunk axis.
+
+    Pruning empties the inside of the crown of wood but not of attractors, and tips at
+    the edge then hook back inward after them, making loops. The horizontal component
+    of a direction toward the axis is limited to (1 - strength) of its length, so at 1
+    no new wood heads inward at all. Wood within 1 m of the axis is left free.
+    """
+    r = pos[:, [0, 2]]
+    rn = np.linalg.norm(r, axis=1)
+    far = rn > 1.0
+    if not far.any():
+        return dirs
+    out = dirs.copy()
+    rhat = np.zeros_like(r)
+    rhat[far] = r[far] / rn[far, None]
+    radial = (dirs[:, [0, 2]] * rhat).sum(1)              # < 0 = heading inward
+    cap = -(1.0 - strength)
+    fix = far & (radial < cap)
+    out[fix, 0] += (cap - radial[fix]) * rhat[fix, 0]
+    out[fix, 2] += (cap - radial[fix]) * rhat[fix, 1]
+    return normalize(out)
+
+
+def _limit_turn(heading, dirs, max_rad):
+    """Rotate each dir toward its heading so it turns at most max_rad from it."""
+    cos = np.clip((dirs * heading).sum(1), -1.0, 1.0)
+    over = np.arccos(cos) > max_rad
+    if not over.any():
+        return dirs
+    h, d = heading[over], dirs[over]
+    perp = d - cos[over, None] * h
+    pn = np.linalg.norm(perp, axis=1, keepdims=True)
+    # a full reversal has no preferred side: turn toward up, then any horizontal
+    alt = UP - (h @ UP)[:, None] * h
+    alt = np.where(np.linalg.norm(alt, axis=1, keepdims=True) < 1e-6, np.array([1.0, 0, 0]), alt)
+    perp = np.where(pn < 1e-6, alt, perp)
+    perp = normalize(perp)
+    out = dirs.copy()
+    out[over] = math.cos(max_rad) * h + math.sin(max_rad) * perp
+    return out
+
+
+def _enforce_branch_angle(nodes, src, dirs, mean_deg, var_deg, seed, max_deg=0.0):
+    """Laterals diverge from their sibling continuation by at least a sampled branch angle,
+    and by at most max_deg when it is set (no side branch sprouting backwards)."""
     has = nodes.first_child[src] >= 0
     if not has.any():
         return dirs
@@ -692,7 +746,12 @@ def _enforce_branch_angle(nodes, src, dirs, mean_deg, var_deg, seed):
     u = hash01(src[idx], seed, 5) * 2 - 1
     target = np.radians(np.clip(mean_deg + var_deg * u, 5, 175))
     cosang = np.clip((d * cdir).sum(1), -1, 1)
-    need = np.arccos(cosang) < target
+    ang = np.arccos(cosang)
+    if max_deg > 0:
+        target = np.where(ang > np.radians(max_deg), np.radians(max_deg), target)
+        need = (ang < target) | (ang > np.radians(max_deg))
+    else:
+        need = ang < target
     if not need.any():
         return dirs
     perp = d - cosang[:, None] * cdir

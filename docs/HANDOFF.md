@@ -362,6 +362,41 @@ wavy S-curves and loops that the interior twigs used to hide. Real oak limbs run
 straight between elbow kinks. Next: fix limb tortuosity, then decide the oak values,
 then the planned geometry-stage twig-cluster pass (tufts below the 0.35 m node spacing).
 
+### Limb waviness (2026-10-09, in progress)
+
+Measured as sinuosity (path / chord over 3 m windows) on orders 1-2. A real oak limb is
+~1.05 over 3 m, changing direction at forks (elbows). The oak was 1.14-1.18 median at
+80 y; with pruning on, worst 10% of windows reached 2.1-2.4 at 200 y (U-turns). The
+waviness comes from growth, not refinement (refinement smooths it slightly).
+`growth.straightness` up to 3 does not help: the loops are not per-step jitter.
+
+Traced the worst windows node by node (scratch script, see session); causes and fixes:
+1. Gravitropism clamp ran before the branch-angle rule, so side shoots could be rotated
+   steeply downward (y -0.88 seen). Fixed: clamp last. Applies to every tree; the
+   approved oak moved by height +/-0.4 m, width +/-0.6 m, lean slightly stronger, up to
+   5 whips at the forest edge. Baseline and sheet re-recorded.
+2. A tip resuming after a stall could turn 77 degrees in one step. New `growth.max_turn`
+   (degrees per step for an extending tip).
+3. Side branches could sprout backwards (151 degrees seen). New
+   `architecture.branch_angle_max`.
+4. Self-pruning could kill a limb's own leader, so limbs became chains of side branches
+   turning the same way. Pruning now never removes a leader (first child).
+5. Edge shoots hooked back into the interior that pruning had emptied (its attractors
+   stay live). New `growth.centrifugal` (1 = no new wood heads back toward the axis).
+
+With 10 deg / 65 deg / 1.0 plus pruning: sinuosity median ~1.11-1.12 at 80 and 200 y,
+worst 10% 1.26-1.34 at 80 y and 1.55-1.60 at 200 y (was 2.1-2.4). All three default off.
+
+Not adopted for the oak. At 80 y the trees look more like the winter photo than any
+version so far (straighter, angular limbs, branching at the edge). At 200 y the
+open-field and edge oaks become flat umbrellas (tall bare trunk, a table of straight
+horizontal limbs, vertical spikes) and the dense-forest oak keeps loops in the vertical
+plane (centrifugal only acts horizontally). Cause: over 200 years pruning + bud lifetime
+strip the lower and inner crown with nothing able to regrow it, while the age curve
+raises shed_threshold to 0.3, leaving a shell on top. That is the next problem: the
+old-tree crown model, not the limbs. Candidate settings to try in the viewer are in
+`out/straight/quercus_straight.toml` (untracked).
+
 ## 6. Working agreements from the session
 
 - Windows PowerShell is the environment; quote comma-separated CLI lists.

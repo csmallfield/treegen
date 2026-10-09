@@ -92,9 +92,10 @@ def test_bole_height_raises_the_first_fork(small_oak):
     from treegen.metrics import tree_metrics
     off = _with(small_oak, "architecture", bole_height=0.0)
     plain = tree_metrics(assemble_skeleton(grow(off, Scene(), 5, 80), off, 5))
-    p = _with(small_oak, "architecture", bole_height=4.0)
+    p = _with(small_oak, "architecture", bole_height=6.0)
     lifted = tree_metrics(assemble_skeleton(grow(p, Scene(), 5, 80), p, 5))
-    assert lifted["first_fork"] >= 4.0 > plain["first_fork"]
+    # lifting runs each light epoch, so the line at age 80 is the one from the last epoch
+    assert lifted["first_fork"] >= 0.85 * 6.0 and lifted["first_fork"] > plain["first_fork"]
     assert lifted["height"] > 0.8 * plain["height"]                 # the crown survives
 
 
@@ -140,3 +141,24 @@ def test_self_pruning_with_bud_lifetime_lengthens_inner_wood(small_oak):
     b = tree_metrics(assemble_skeleton(grow(on, Scene(), 42, 120), on, 42))
     assert b["stick_inner"] > 1.5 * a["stick_inner"]
     assert b["branches"] < a["branches"]
+
+
+def test_straightening_rules_reduce_limb_waviness(small_oak):
+    """Turn limit, maximum branch angle and centrifugal growth keep limbs from looping."""
+    def sinuosity(params):
+        sk = assemble_skeleton(grow(params, Scene(), 42, 120), params, 42)
+        vals = []
+        for c in np.flatnonzero((sk.order >= 1) & (sk.order <= 2)):
+            a, b = sk.offsets[c] + 1, sk.offsets[c + 1]
+            P = sk.points[a:b]
+            if len(P) < 10:
+                continue
+            for i in range(0, len(P) - 9, 3):
+                path = np.linalg.norm(np.diff(P[i:i + 10], axis=0), axis=1).sum()
+                vals.append(path / max(np.linalg.norm(P[i + 9] - P[i]), 1e-9))
+        return np.percentile(vals, 90)
+    loose = _with(small_oak, "growth", max_turn=0.0, centrifugal=0.0)
+    loose = _with(loose, "architecture", branch_angle_max=0.0)
+    tight = _with(small_oak, "growth", max_turn=10.0, centrifugal=1.0)
+    tight = _with(tight, "architecture", branch_angle_max=65.0)
+    assert sinuosity(tight) < sinuosity(loose)
