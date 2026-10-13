@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: 2026-10-13. B0 (paper check) and B1 (first tree) done; B2 next.
+Status: 2026-10-13. B0 and B1 done. B2 mechanisms built; B2 is not passed (section 11).
 
 ## 1. Why
 
@@ -191,7 +191,7 @@ Target: nine species parameters with biological meaning, replacing the
 | `shoot_length` | Internode length per unit of resource (m) |
 | `resource_per_light` (`alpha`) | Converts gathered light into growth resource |
 | `apical_control` (`lambda`) | Share of resource to the main axis at a fork |
-| apical control over age | A curve, as the paper reduces `lambda` during development |
+| `apical_control_old` | `lambda` at `max_age`; `apical_control` moves to it over the tree's life |
 | `branching_angle` | Angle of a lateral bud to its parent internode |
 | `phyllotaxis` | Rotation between successive lateral buds (137.5 degrees to start) |
 | `light_weight` (`xi`) | Pull toward the optimal light direction (3.4) |
@@ -326,3 +326,56 @@ Found on the way:
   for light each season: 80 y at the paper's `alpha = 2` is 367,000 nodes and
   over 8 minutes. Shedding should cut this; if not, it is the first performance
   problem to solve.
+
+## 11. B2 status (2026-10-13): mechanisms built, not passed
+
+Built: shedding (a lateral branch whose gathered light per internode is below
+`shed_threshold` goes, with its buds; its tips stay in the pipe memory of the
+wood below) and `apical_control_old`. Tests cover both.
+
+Open field, seed 42. Candidate: `shoot_length` 0.1, `resource_per_light` 4,
+`leaf_area` 0.15, `shed_threshold` 0.15, `apical_control` 0.52 -> 0.45.
+
+| Age | Live / total nodes | Height / width | First fork | DBH | Inner wood between forks | Time |
+| --- | --- | --- | --- | --- | --- | --- |
+| 20 | 2,127 / 3,874 | 7.7 / 4.5 m | 0.1 m | 0.32 m | 0.26 m | 2 s |
+| 80 | 21,375 / 150,787 | 25.6 / 18.5 m | 0.2 m | 1.70 m | 0.44 m | 78 s |
+| 200 | stopped at year 124: 400,000 total nodes | - | - | - | - | 129 s |
+
+What the scans showed (age 40 or 80, open field):
+
+- **Coarse internodes put the model on a knife-edge.** A bud needs one unit of
+  resource to grow. With 0.3 m internodes a lit bud gets 1-2 units, so at
+  `alpha` 1.3 any bud under 77% light is dormant; small changes flip between a
+  stalled seedling, a sensible tree and 84,000 nodes. With 0.1 m internodes
+  and `alpha` 3-4 the response is smooth, but there are three to ten times as
+  many nodes.
+- **Apical control has a very narrow usable range**, as in the paper (0.46 to
+  0.54). 0.55 gives a 31 m tree at 40 y, 0.6 gives 94 m: allocation funnels
+  the crown's resource to the leader and nothing limits one shoot's season.
+- **The clear trunk does not appear in the open field.** With `lambda` 0.5 the
+  seedling's first lateral buds are all lit and all grow; the tree is a bush
+  from year 2 and the first fork stays at 0.1-0.4 m. Shedding does not lift
+  it, because low branches on an open-grown tree are lit from the side. Raising
+  young `lambda` gives a trunk but with the height problem above.
+- **Bare inner limbs with tufted ends do appear** with no rule for them (the
+  age-80 candidate). The stick metric still reads 0.3-0.4 m because the tufts
+  dominate it.
+- **The trunk is far too thick** (DBH 1.7 m at 80 y): with fine internodes
+  there are many more tips, and the pipe memory keeps every twig ever shed.
+  The radii stage needs recalibrating for this backend.
+- **Cost is the blocker for 200 years.** Each season costs in proportion to
+  every node ever made: shed nodes stay in the arrays, and every surviving
+  node keeps a dormant bud that is sampled for light.
+
+Not yet answered: whether this model gives a convincing old oak. It cannot be
+tested until 200 years is affordable.
+
+Next, in order, if the work continues:
+
+1. Performance: take shed nodes out of the working arrays (keep them aside
+   for the shed overlay and the age scrub); give deeply shaded dormant buds
+   the "abort" fate the paper names, so they stop being sampled.
+2. Recalibrate the radii stage for fine internodes.
+3. Then return to the section 7 targets, starting with the clear trunk, and
+   decide adopt / reassess.
