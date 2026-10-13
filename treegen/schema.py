@@ -53,6 +53,9 @@ SCHEMA: list[Param] = [
           "height x (1 + k*shade) and radius / (1 + k*shade). Shade is 0 in the open, so the "
           "open-field tree is unchanged"),
     # growth ----------------------------------------------------------------
+    P("growth", "model", "colonization", "str", choices=("colonization", "buds"),
+      doc="Growth backend: space colonization inside the envelope, or the bud-based "
+          "self-organising model ([buds] group; no envelope)"),
     P("growth", "attractor_count", 8000, "int", lo=100, hi=500_000,
       doc="Attractors inside the envelope at reference age (density is held constant across ages)"),
     P("growth", "influence_radius", 10.0, lo=1.0, hi=100, unit="x step",
@@ -78,6 +81,22 @@ SCHEMA: list[Param] = [
           "so old crowns can refill where light reaches. 0 = never"),
     P("growth", "trunk_bias", 0.0, lo=0, hi=1,
       doc="Extra vertical bias on the leader only (conifers)"),
+    # buds (growth.model = "buds") --------------------------------------------
+    P("buds", "shoot_length", 0.3, lo=0.02, hi=2, unit="m", doc="Internode length per unit of resource"),
+    P("buds", "resource_per_light", 2.0, lo=0.1, hi=20,
+      doc="alpha: growth resource the tree gets per unit of light its buds gather"),
+    P("buds", "apical_control", 0.5, lo=0, hi=1,
+      doc="lambda: share of resource to the main axis at each node. Above 0.5 favours leaders "
+          "(a trunk), below favours laterals (a spreading crown); sensitive near 0.5"),
+    P("buds", "leaf_area", 0.2, lo=0, hi=5, unit="m2",
+      doc="Leaf area on each leaf-bearing node (last season's shoots and axis ends); sets how much "
+          "the tree shades itself"),
+    P("buds", "branching_angle", 45.0, lo=5, hi=90, unit="deg",
+      doc="Angle of a lateral bud to the internode it sits on"),
+    P("buds", "phyllotaxis", 137.5, lo=0, hi=360, unit="deg",
+      doc="Rotation between successive lateral buds along an axis"),
+    P("buds", "light_weight", 0.2, lo=0, hi=3, doc="xi: pull of each new internode toward the best light"),
+    P("buds", "tropism", 0.1, lo=-3, hi=3, doc="eta: pull of each new internode up (positive) or down (negative)"),
     # architecture ----------------------------------------------------------
     P("architecture", "branch_angle", {"mean": 48.0, "var": 12.0}, "dict", unit="deg",
       doc="Minimum divergence between a lateral and its sibling continuation"),
@@ -144,7 +163,7 @@ GROUPS = list(dict.fromkeys(p.group for p in SCHEMA))
 
 # Which stage each group invalidates (see design doc §8 Caching).
 STAGE_GROUPS = {
-    "skeleton": ["meta", "envelope", "growth", "light", "architecture", "age_response"],
+    "skeleton": ["meta", "envelope", "growth", "buds", "light", "architecture", "age_response"],
     "radii": ["radii", "refinement"],
     "geometry": ["geometry", "materials"],
 }

@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: proposal, 2026-10-13. Nothing here is built.
+Status: 2026-10-13. B0 (paper check) and B1 (first tree) done; B2 next.
 
 ## 1. Why
 
@@ -24,10 +24,10 @@ This document proposes building that as a second growth backend, comparing it
 with the current one on the measurements already in the repo, and deleting the
 patch rules if it wins.
 
-**Check before coding:** the model description below is written from memory of
-the paper and of the Borchert-Honda model it builds on. Section 3 must be
-checked against the paper itself as milestone B0. Where this document and the
-paper disagree, the paper wins unless there is a recorded reason.
+**B0, done 2026-10-13:** section 3 was first written from memory and has now
+been checked against the paper (Palubicki et al., SIGGRAPH 2009, sections 4.1
+to 4.5 and 6). Section 3 below is the corrected version; section 3.7 lists
+what changed and where treegen deliberately departs from the paper.
 
 ## 2. Scope
 
@@ -81,8 +81,10 @@ direction at every live bud. No change to `core/light.py`.
 
 ### 3.3 Bud fate
 
-A bud with resource `v` grows a shoot of `floor(v)` internodes, each of length
-`shoot_length * v / floor(v)`. A bud with `v < 1` stays dormant. This one rule
+A bud with resource `v` grows a shoot of `n = floor(v)` internodes, each of
+length `shoot_length * v / n` (the paper's `l = v / n`, in metres). A bud with
+`v < 1` stays dormant and may grow in a later season. Development is
+proleptic: a bud formed this season cannot grow until the next. This one rule
 is the source of most of what we have been patching:
 
 - vigorous leaders make long internodes, weak outer shoots make short ones:
@@ -91,22 +93,22 @@ is the source of most of what we have been patching:
 - most lateral buds never break: fork spacing comes from the budget, not from
   point spacing.
 
-A bud also stays dormant if the space it would grow into is occupied (own wood
-within a small radius, or inside a neighbour proxy).
-
 ### 3.4 Shoot direction
 
-A new shoot's direction is a weighted sum of three terms, then normalised:
+Each internode of a new shoot points along a weighted sum of three vectors,
+normalised:
 
-- the bud's own direction (the parent's direction for a terminal bud; rotated
-  out by the branching angle and round by the phyllotactic angle for a lateral);
-- the light direction from the field, weight `phototropism`;
-- gravity, weight `gravitropism` (negative values lift shoots, positive droop).
+- the default orientation: the bud's direction for the first internode (the
+  supporting internode's direction for a terminal bud; rotated out by the
+  branching angle and round by the phyllotactic angle for a lateral), and the
+  previous internode's direction after that;
+- the optimal growth direction from the light field, weight `xi`;
+- a tropism vector (up or down), weight `eta`.
 
-Direction is set once per shoot, not re-steered every 35 cm, so limbs run
-straight and change direction where a lateral takes over from a dead or weak
-leader: the oak's elbow. Every new internode carries a terminal bud and lateral
-buds placed by phyllotaxis.
+There is no steering toward scattered points, so limbs run as straight as the
+two weights allow and change direction where a lateral takes over from a weak
+leader: the oak's elbow. Every new node carries one lateral bud, placed by
+phyllotaxis; the shoot's end carries the terminal bud.
 
 ### 3.5 Shedding
 
@@ -124,13 +126,44 @@ the old one by construction, which keeps the age scrub and the
 young-is-a-prefix-of-old property. Old-age form should come from two things
 already in the model, not from an authored curve:
 
-- `lambda` declining with tree size, so leaders lose dominance and co-dominant
-  stems take over (reiteration);
-- resource per unit of light falling with path length from the root (hydraulic
-  limitation), which slows height growth and is what caps a tree's height.
+- apical control `lambda` reduced over the tree's life, so leaders lose
+  dominance and the form goes from excurrent to decurrent. This is the paper's
+  own mechanism for mature form;
+- self-shading, which limits the light, and so the resource, a large crown
+  can gather.
 
-Whether these two are enough for a convincing 200-year oak is the main open
-question (section 8).
+Whether these are enough for a convincing 200-year oak is the main open
+question (section 8). Nothing else is to be added for old age unless a
+measured failure calls for it.
+
+### 3.7 Checked against the paper (B0)
+
+Corrected from the first draft:
+
+- direction is weighted per internode, not once per shoot (3.4);
+- one lateral bud per node, and prolepsis (3.3, 3.4);
+- the light-driven variant has no occupancy test; buds compete through light
+  alone (removed from 3.3);
+- "hydraulic cost" and "bud lifetime" are not in the paper and are removed
+  from the model and the parameter table.
+
+Reference values from the paper: `alpha = 2`; `lambda` between 0.46 and 0.54
+across its figure of forms, so the model is very sensitive near 0.5; pipe
+exponent between 2 and 3; trees of 1,000 to 700,000 internodes over 68 to 106
+steps; a light grid cell about one internode long.
+
+Deliberate departures:
+
+| Paper | treegen | Reason |
+| --- | --- | --- |
+| Shadow propagation: each bud casts a pyramid of shadow downward | The existing occlusion field with hemisphere ray marching | Already built and tested, handles neighbour proxies, and gives exposure and light direction, the two inputs the model needs |
+| Exposure `Q = max(C - s + a, 0)` | Exposure in [0, 1] | Follows from the above; `alpha` is calibrated to it |
+| Internodes near real size, up to 700,000 | Coarser internodes (about 0.3 m), tens of thousands | Downstream stages and interactive use; fine twigs stay a geometry pass |
+| Priority model as an alternative allocator | Extended Borchert-Honda only | One allocator to calibrate first |
+
+The paper also states the diagnosis behind this proposal: trees generated by
+spatial competition alone "tend to be quite disorganized", because a branch
+can attach anywhere at any orientation.
 
 ## 4. The envelope
 
@@ -150,7 +183,7 @@ long they grew. It needs a decision before B3.
 
 ## 5. Parameters
 
-Target: about a dozen species parameters with biological meaning, replacing the
+Target: nine species parameters with biological meaning, replacing the
 `growth`, `architecture` and most of the `envelope` and `age_response` groups.
 
 | Parameter | Meaning |
@@ -158,14 +191,13 @@ Target: about a dozen species parameters with biological meaning, replacing the
 | `shoot_length` | Internode length per unit of resource (m) |
 | `resource_per_light` (`alpha`) | Converts gathered light into growth resource |
 | `apical_control` (`lambda`) | Share of resource to the main axis at a fork |
-| `apical_control_decline` | How `lambda` falls with tree size |
-| `hydraulic_cost` | Loss of resource per metre of path from the root |
-| `branching_angle` | Angle of a lateral to its parent |
-| `phyllotaxis` | Rotation between successive lateral buds (about 137.5 or 144 degrees for oak) |
-| `buds_per_node` | Lateral buds per node (oak clusters several at shoot tips) |
-| `phototropism`, `gravitropism` | Direction weights (3.4) |
-| `shed_threshold` | Light per unit size below which a branch is shed |
-| `bud_lifetime` | Seasons a dormant bud stays viable |
+| apical control over age | A curve, as the paper reduces `lambda` during development |
+| `branching_angle` | Angle of a lateral bud to its parent internode |
+| `phyllotaxis` | Rotation between successive lateral buds (137.5 degrees to start) |
+| `light_weight` (`xi`) | Pull toward the optimal light direction (3.4) |
+| `tropism` (`eta`) | Pull up (positive) or down (negative) (3.4) |
+| `leaf_area` | Leaf area on each leaf-bearing node (m2); sets self-shading. Added in B1 |
+| `shed_threshold` | Light per internode below which a branch is shed |
 
 Kept as they are: `light.*`, `radii.*`, `refinement.*`, `geometry.*`,
 `materials.*`, `meta.*`.
@@ -221,7 +253,7 @@ kind we are trying to delete in order to pass.
   realism lives in the tuning rather than the algorithm". Expect the oak to
   need real calibration; the difference is that every parameter means
   something.
-- **Old age.** Whether declining apical control and hydraulic cost give a
+- **Old age.** Whether declining apical control and self-shading give a
   convincing 200-year crown is unproven. It is the case the current model
   fails, so it is the first thing to test after a 80-year tree works (B2).
 - **Resolution.** A real 200-year oak has far more internodes than we can
@@ -230,7 +262,9 @@ kind we are trying to delete in order to pass.
 - **Losing the envelope as the main control** (section 4).
 - **Neighbours are proxies.** They compete through light and occupancy only,
   and do not respond to the tree. Same as today.
-- **Fidelity to the paper** (section 1, B0).
+- **Light grid resolution.** The paper uses cells about one internode long;
+  the current field is 64 cells along the longest axis. The bud backend sizes
+  cells from `shoot_length` instead; cost to be measured.
 
 ## 9. Milestones
 
@@ -245,3 +279,50 @@ kind we are trying to delete in order to pass.
 
 B1 and B2 are the cheap part and answer the main question. The decision in
 section 4 is needed before B3.
+
+## 10. B1 result (2026-10-13)
+
+`treegen/core/buds.py`, selected by `growth.model = "buds"`; species file
+`species/quercus_buds.toml`. Sections 3.1 to 3.4 only: no shedding, no change of
+apical control with age, no envelope, open field.
+
+Oak, seed 42, age 80, open field, against the approved colonization oak
+(shade response, 3 m bole, whip rule, trunk thickness 0.8):
+
+| | Approved oak | Bud model, B1 | Target |
+| --- | --- | --- | --- |
+| Height / crown width | 20.8 / 27.1 m | 25.6 / 26.8 m | - |
+| First fork | 3.8 m (bole setting) | 0.4 m | 2-5 m, from shedding |
+| DBH | 0.66 m | 0.90 m | - |
+| Branches | 1,055 | 5,277 | - |
+| Whips | 0 (whip rule) | 0 | 0 |
+| Sinuosity over 3 m, median / worst 10% | 1.16 / 1.49 | 1.03 / 1.11 | about 1.05 |
+| Sinuosity over 8 m, worst 10% | 1.75 | 1.19 | about 1.2 |
+| Wood between forks, inner | 1.3 m | 0.3 m | 2.5 m+, from shedding |
+| Run time | about 7 s | 16 s (13,104 nodes) | no slower |
+
+What it shows:
+
+- Straight limbs with elbows, and no whips, with no rule for either. Both
+  straightness targets are met on the first run.
+- The young tree is an exact prefix of the old one, and runs are deterministic.
+- Every node's lateral bud grows a short twig, so limbs are feathered and the
+  first fork is at the ground. Both are what shedding (B2) is for; B1 cannot
+  say yet whether B2 delivers them.
+- The model is as sensitive as the paper says. `resource_per_light` 1.1 stalls
+  as a seedling (every bud below one unit, and nothing then changes), 1.3 gives
+  13,000 nodes, 1.5 gives 84,000. `apical_control` 0.46 gives a 36 m wide dome,
+  0.54 an 82 m pole.
+
+Found on the way:
+
+- The old model's `light.foliage_density` (2.0) made four seedling nodes shade
+  each other to 0.1-0.5 exposure, because there one tip stood for a whole
+  foliage cluster. The bud model takes leaf opacity from `buds.leaf_area`
+  instead, in real units.
+- Light cells are sized from `shoot_length` (1.5 internodes), capped at 128
+  cells along the longest axis.
+- Cost grows with every node, since each keeps a dormant bud that is sampled
+  for light each season: 80 y at the paper's `alpha = 2` is 367,000 nodes and
+  over 8 minutes. Shedding should cut this; if not, it is the first performance
+  problem to solve.

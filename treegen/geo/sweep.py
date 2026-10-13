@@ -130,7 +130,10 @@ def build_geometry(sk, params: dict, lod: float = 1.0) -> Geometry:
     min_r = params["architecture"]["min_radius_for_mesh"]
     lo, hi = int(G["radial_segments"]["min"]), int(G["radial_segments"]["max"])
     lo_l, hi_l = max(3, int(round(lo * lod))), max(3, int(round(hi * lod)))
-    edge = params["growth"]["step_length"] * 0.6 / max(lod, 1e-3)
+    # ring spacing follows node spacing: fixed for colonization, the shoot length for buds
+    spacing = (params["buds"]["shoot_length"] if params["growth"]["model"] == "buds"
+               else params["growth"]["step_length"])
+    edge = spacing * 0.6 / max(lod, 1e-3)
 
     frames = parallel_transport(sk.points, sk.offsets, sk.parent_curve, sk.parent_point)
     base_r = np.array([sk.radius[sk.offsets[c]:sk.offsets[c + 1]].max() for c in range(sk.curve_count)])

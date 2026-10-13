@@ -20,6 +20,7 @@ import numpy as np
 
 from .core import radii as radii_mod
 from .core.age import age_state
+from .core.buds import grow_buds
 from .core.growth import GrowthResult, grow
 from .core.refine import refine
 from .core.skeleton import Branches, build_graph, extract_branches
@@ -38,7 +39,7 @@ def _code_hash() -> str:
     import hashlib
     core = Path(__file__).parent / "core"
     h = hashlib.sha1()
-    for name in ("growth.py", "light.py", "envelope.py", "age.py", "util.py"):
+    for name in ("growth.py", "buds.py", "light.py", "envelope.py", "age.py", "util.py"):
         h.update((core / name).read_bytes().replace(b"\r\n", b"\n"))   # same hash on any checkout
     return h.hexdigest()[:8]
 
@@ -140,7 +141,8 @@ class Pipeline:
             res = GrowthResult.from_npz(path)
         else:
             t = time.perf_counter()
-            res = grow(params, scene, seed, age, progress=progress)
+            model = grow_buds if params["growth"]["model"] == "buds" else grow
+            res = model(params, scene, seed, age, progress=progress)
             self._log(f"growth: {time.perf_counter() - t:.1f}s  {res.stats}")
             if path:
                 path.parent.mkdir(parents=True, exist_ok=True)
