@@ -18,7 +18,6 @@ kill_radius = 2.0           # relative to step_length
 step_length = 0.35
 apical_dominance = 0.75
 straightness = 0.3
-bud_years = 2.0            # side buds break on young wood only, so pruned shoots stay gone
 iterations_per_year = 2
 
 [architecture]
@@ -33,6 +32,7 @@ pipe_exponent = 2.3
 tip_radius = 0.01
 trunk_flare = { amount = 0.4, height = 0.08 }
 junction_swell = 1.15
+trunk_thickness = 0.8      # offsets the heavier pipe sums of the better-branched crown
 
 [refinement]
 smoothing = 0.6
@@ -44,7 +44,6 @@ noise = { amplitude = 0.08, frequency = 2.0 }
 shed_threshold = 0.15
 grid_resolution = 64
 foliage_density = 2.0
-prune_share = 0.3          # side shoots losing to a sibling 3:1+ die back: long inner runs
 
 [geometry]
 mesh_orders = [0, 1, 2, 3, 4]   # every limb >= min_radius_for_mesh is a tube, whatever its order
