@@ -88,6 +88,11 @@ SCHEMA: list[Param] = [
     P("buds", "apical_control", 0.5, lo=0, hi=1,
       doc="lambda: share of resource to the main axis at each node. Above 0.5 favours leaders "
           "(a trunk), below favours laterals (a spreading crown); sensitive near 0.5"),
+    P("buds", "apical_control_old", 0.5, lo=0, hi=1,
+      doc="lambda at max_age; apical_control moves to this value over the tree's life, so a "
+          "leader-dominated young tree can become a spreading old one"),
+    P("buds", "shed_threshold", 0.0, lo=0, hi=1,
+      doc="A branch gathering less light than this per internode is shed. 0 = never"),
     P("buds", "leaf_area", 0.2, lo=0, hi=5, unit="m2",
       doc="Leaf area on each leaf-bearing node (last season's shoots and axis ends); sets how much "
           "the tree shades itself"),

@@ -12,13 +12,18 @@ axis ends in a terminal bud. Each season:
                   shoot_length * v / floor(v); below 1 it stays dormant
     5. direction  each internode = default orientation + xi * V + eta * up
 
+Between gathering and allocating, a branch whose gathered light per internode is
+below shed_threshold is shed with its buds (Takenaka 1994, as in the paper): it
+costs the tree more than it earns. Apical control lambda moves from its young to
+its old value over the tree's life, which is how the paper takes a tree from a
+leader-dominated youth to a spreading old crown.
+
 Nothing here knows about an envelope or about attractor points: where a branch
 starts, how long it runs and where the crown ends all come out of the light and
 the resource budget. See docs/BUD_BACKEND_DESIGN.md for the model, the check
 against the paper and the places treegen departs from it (the light model above
 all: the existing occlusion field stands in for the paper's shadow propagation).
 
-Shedding and the change of apical control with age are milestone B2.
 """
 from __future__ import annotations
 
@@ -28,7 +33,7 @@ import numpy as np
 
 from ..schema import Scene
 from .age import age_state
-from .growth import ALIVE, GrowthResult
+from .growth import ALIVE, SHED, GrowthResult
 from .light import LightField, neighbour_bounds
 from .util import UP, depth_levels, hash01, normalize
 
@@ -58,6 +63,14 @@ class _Grow:
         s = slice(self.n, need)
         self.n = need
         return s
+
+    def keep(self, mask: np.ndarray):
+        """Drop the rows where mask is False."""
+        m = int(mask.sum())
+        for k in self._fields:
+            a = getattr(self, k)
+            a[:m] = a[: self.n][mask]
+        self.n = m
 
 
 def _basis(d: np.ndarray):
@@ -93,9 +106,42 @@ def _field(params, scene, pos, leafy, hscale, cell):
                             L["ray_count"], L["sky_bias"], hscale)
 
 
+def _shed(nodes, N, levels, Q, threshold, year):
+    """Mark branches whose light per internode is below threshold; returns the shed mask or None.
+
+    A branch is a lateral axis with everything it carries. Its size is its internode
+    count. The main stem is never shed. The tips a shed branch carried are remembered
+    on the node it left, so the wood below keeps the thickness it grew to support.
+    """
+    par = nodes.parent[:N]
+    live = nodes.state[:N] == ALIVE
+    size = live.astype(np.float64)
+    kids = np.zeros(N, np.int64)
+    np.add.at(kids, par[1:][live[1:]], 1)
+    tips = (live & (kids == 0)).astype(np.float64)
+    for lvl in reversed(levels[1:]):
+        np.add.at(size, par[lvl], size[lvl])
+        np.add.at(tips, par[lvl], tips[lvl])
+    base = live & ~nodes.main[:N] & (Q < threshold * size)
+    base[0] = False
+    if not base.any():
+        return None
+    mark = base.copy()
+    for lvl in levels[1:]:
+        mark[lvl] |= mark[par[lvl]]
+    mark &= live
+    top = np.flatnonzero(base & ~mark[np.maximum(par, 0)])          # outermost shed branches only
+    np.add.at(nodes.shed_tips, par[top], tips[top])
+    nodes.state[:N][mark] = SHED
+    nodes.shed_year[:N][mark] = year
+    return mark
+
+
 def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) -> GrowthResult:
     B = params["buds"]
-    alpha, lam = B["resource_per_light"], B["apical_control"]
+    alpha = B["resource_per_light"]
+    lam_young, lam_old = B["apical_control"], B["apical_control_old"]
+    shed_thr, max_age = B["shed_threshold"], params["meta"]["max_age"]
     shoot, xi, eta = B["shoot_length"], B["light_weight"], B["tropism"]
     angle, phyllo = math.radians(B["branching_angle"]), math.radians(B["phyllotaxis"])
     seasons = int(math.floor(age))
@@ -104,6 +150,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         "pos": (np.float64, (3,), 0.0), "parent": (np.int64, (), -1), "birth": (np.float32, (), 0.0),
         "depth": (np.int32, (), 0), "main": (bool, (), True),      # main: continues its parent's axis
         "phi": (np.float64, (), 0.0),                               # phyllotactic azimuth along the axis
+        "state": (np.int8, (), ALIVE), "shed_year": (np.float32, (), -1.0), "shed_tips": (np.float32, (), 0.0),
     })
     buds = _Grow({
         "node": (np.int64, (), 0), "dir": (np.float64, (3,), 0.0), "terminal": (bool, (), False),
@@ -113,7 +160,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     nodes.reserve(1)                                                # the seedling: one node, one bud
     s = buds.reserve(1)
     buds.dir[s], buds.terminal[s], buds.birth[s] = UP, True, -1.0
-    stats = {"seasons": seasons, "shoots": 0, "grid": [0, 0, 0]}
+    stats = {"seasons": seasons, "shoots": 0, "shed_nodes": 0, "grid": [0, 0, 0]}
     field_ = None
 
     for year in range(1, seasons + 1):
@@ -121,11 +168,14 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         pos, par = nodes.pos[:N], nodes.parent[:N]
         bnode = buds.node[:M]
         hscale = age_state(params, float(year)).height_mult
+        lam = lam_young + (lam_old - lam_young) * min(year / max_age, 1.0)
+        live = nodes.state[:N] == ALIVE
 
         # ---- 1. light: leaves sit on last season's shoots and at the axis ends ----------------
         leafy = np.zeros(N, bool)
         leafy[nodes.birth[:N] >= year - 1] = True
         leafy[bnode[buds.terminal[:M]]] = True
+        leafy &= live
         field_ = _field(params, scene, pos, leafy, hscale, shoot * 1.5)
         with_bud = np.unique(bnode)
         q_s, v_s = field_.sample(pos[with_bud])
@@ -141,6 +191,19 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         levels = depth_levels(nodes.depth[:N])
         for lvl in reversed(levels[1:]):
             np.add.at(Q, par[lvl], Q[lvl])
+
+        # ---- shed branches that gather too little light for their size --------------------------
+        if shed_thr > 0:
+            shed = _shed(nodes, N, levels, Q, shed_thr, year)
+            if shed is not None:
+                stats["shed_nodes"] += int(shed.sum())
+                buds.keep(~shed[bnode])
+                M = buds.n
+                bnode, qb = buds.node[:M], q_node[buds.node[:M]]
+                Q = np.zeros(N)                                     # gather again without them
+                np.add.at(Q, bnode, qb)
+                for lvl in reversed(levels[1:]):
+                    np.add.at(Q, par[lvl], Q[lvl])
 
         # ---- 3. allocate resource, root to tips (extended Borchert-Honda) -----------------------
         w_node = np.where(nodes.main[:N], lam, 1.0 - lam)
@@ -167,9 +230,9 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         count_g = count[go]
         length = shoot * vb[go] / count_g
         cur = bnode[go].copy()
-        cur_dir = buds.dir[go].copy()
+        cur_dir = buds.dir[:M][go].copy()
         light = vdir[cur]
-        lateral_start = ~buds.terminal[go]
+        lateral_start = ~buds.terminal[:M][go]
         stats["shoots"] += len(go)
 
         # ---- 5. extend every growing shoot one internode at a time ------------------------------
@@ -206,13 +269,14 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     else:
         leafy = nodes.birth[:N] >= seasons - 1
         leafy[buds.node[: buds.n][buds.terminal[: buds.n]]] = True
+        leafy &= nodes.state[:N] == ALIVE
         field_ = _field(params, scene, pos, leafy, age_state(params, float(age)).height_mult, shoot * 1.5)
         expo, ldir = field_.sample(pos)
         stats["grid"] = list(field_.density.shape)
-    stats.update(nodes=N, alive=N, buds=int(buds.n))
+    stats.update(nodes=N, alive=int((nodes.state[:N] == ALIVE).sum()), buds=int(buds.n))
     return GrowthResult(
         pos=pos, parent=nodes.parent[:N].copy(), birth=nodes.birth[:N].copy(),
-        state=np.full(N, ALIVE, np.int8), depth=nodes.depth[:N].copy(),
-        shed_year=np.full(N, -1.0, np.float32), shed_tips=np.zeros(N, np.float32),
+        state=nodes.state[:N].copy(), depth=nodes.depth[:N].copy(),
+        shed_year=nodes.shed_year[:N].copy(), shed_tips=nodes.shed_tips[:N].copy(),
         exposure=expo, light_dir=ldir, attractors=np.zeros((0, 3)), attractor_state=np.zeros(0, np.int8),
         age=float(age), stats=stats)

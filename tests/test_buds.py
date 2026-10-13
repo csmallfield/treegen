@@ -46,3 +46,24 @@ def test_apical_control_trades_height_for_spread(bud_oak):
 def test_pipeline_dispatches_on_growth_model(bud_oak):
     g, sk = Pipeline().skeleton(bud_oak, Scene(), 3, 12.0)
     assert len(g.attractors) == 0 and sk.height > 1.0
+
+
+def test_shedding_removes_wood_and_keeps_the_tree_valid(bud_oak):
+    from treegen.core.growth import SHED
+    p = {**bud_oak, "buds": {**bud_oak["buds"], "shed_threshold": 0.4}}
+    kept, shed = grow_buds(bud_oak, Scene(), 3, 25), grow_buds(p, Scene(), 3, 25)
+    assert (kept.state == SHED).sum() == 0 and (shed.state == SHED).sum() > 0
+    assert shed.shed_tips.sum() > 0                                 # the wood below remembers them
+    assert np.all(shed.shed_year[shed.state == SHED] > 0)
+    sk = assemble_skeleton(shed, p, 3)                              # shed wood is gone from the skeleton
+    # (extraction also drops branch orders above max_order, hence <=)
+    assert len(np.unique(sk.node)) <= (shed.state != SHED).sum() < len(shed.pos)
+    assert shed.state[0] != SHED                                    # never the main stem
+
+
+def test_apical_control_changes_over_the_trees_life(bud_oak):
+    def height(old):
+        p = {**bud_oak, "buds": {**bud_oak["buds"], "apical_control": 0.5, "apical_control_old": old},
+             "meta": {**bud_oak["meta"], "max_age": 30}}
+        return grow_buds(p, Scene(), 3, 30).pos[:, 1].max()
+    assert height(0.56) > height(0.44)                              # leaders favoured late: taller
