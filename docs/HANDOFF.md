@@ -426,7 +426,19 @@ Candidate next directions: let the envelope soften/grow at its top edge for old 
 or move old-age crown behaviour into a different growth rule (e.g. sympodial/
 reiteration-driven renewal from the scaffold rather than tips chasing attractors).
 
+### Direction change (2026-10-13)
+
+The rules added since the handoff patch biology into space colonization, which is a
+volume-filling algorithm, not a growth simulation; old crowns are shaped mostly by
+those rules interacting. Agreed with the user to stop adding rules and to design a
+bud-based backend (Palubicki et al. 2009) as a second growth model, judged on the
+same metrics. Proposal: `docs/BUD_BACKEND_DESIGN.md`. The experimental settings from
+the last three commits stay off; `species/quercus.toml` in git is the approved oak.
+
 ## 6. Working agreements from the session
+
+- Commit messages follow the user's global rules: imperative subject of 50 characters
+  or fewer, body wrapped at 72, ASCII, intent only, no attribution trailers.
 
 - Windows PowerShell is the environment; quote comma-separated CLI lists.
 - When extracting a zip into the repo, extract to a temp folder first and copy in — a
