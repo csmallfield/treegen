@@ -1,9 +1,12 @@
 """Random search over bud-model parameters, scored against open-grown oak targets.
 
     python scripts/bud_calibrate.py --samples 120 --out out/buds/calib.json
+    python scripts/bud_calibrate.py --around out/buds/calib.json --top 5 --local 0.5
 
-Each sample grows the oak at 20 and 80 years (open field) and scores it on log
+Each sample grows the oak at 20, 80 and 200 years (open field) and scores it on log
 errors against the targets below, so a factor of two either way costs the same.
+With --around, a share of the samples (--local) is drawn near the best results of
+an earlier search instead of across the whole space.
 The point is less to find one best tree than to see whether any region of the
 parameter space meets all targets at once, and which parameters matter.
 """
@@ -38,14 +41,29 @@ INTS = {"buds.shadow_depth"}
 TARGETS = {
     20.0: {"dbh": 0.16, "height": 8.0, "crown_width": 7.0},
     80.0: {"dbh": 0.64, "height": 22.0, "crown_width": 22.0, "first_fork": 3.0, "fork_gap_inner": 2.0},
+    200.0: {"dbh": 1.6, "height": 27.0, "crown_width": 32.0, "first_fork": 3.0, "fork_gap_inner": 2.0},
 }
-MAX_LIVE = 150_000
+MAX_LIVE = {20.0: 20_000, 80.0: 200_000, 200.0: 1_200_000}
 
 
 def _sample(rng):
     out = {"buds.light_model": "shadow"}
     for k, (lo, hi, log) in SPACE.items():
         v = math.exp(rng.uniform(math.log(lo), math.log(hi))) if log else rng.uniform(lo, hi)
+        out[k] = int(round(v)) if k in INTS else round(v, 4)
+    return out
+
+
+def _near(rng, base, spread):
+    """A sample perturbed around an earlier result: spread is a fraction of each range."""
+    out = {"buds.light_model": "shadow"}
+    for k, (lo, hi, log) in SPACE.items():
+        v = base.get(k, (lo + hi) / 2)
+        if log:
+            v = math.exp(math.log(v) + rng.gauss(0, spread) * (math.log(hi) - math.log(lo)))
+        else:
+            v = v + rng.gauss(0, spread) * (hi - lo)
+        v = min(max(v, lo), hi)
         out[k] = int(round(v)) if k in INTS else round(v, 4)
     return out
 
@@ -70,7 +88,7 @@ def _score(job):
             g = grow_buds(p, Scene(), 42, age)
         except RuntimeError:
             return sets, 99.0, {"failed": f"too many nodes by {age:g} y"}, time.perf_counter() - t
-        if g.stats["alive"] < 50 or g.stats["alive"] > MAX_LIVE:
+        if g.stats["alive"] < 50 or g.stats["alive"] > MAX_LIVE[age]:
             return sets, 50.0, {"failed": f"{g.stats['alive']} live nodes at {age:g} y"}, time.perf_counter() - t
         m = tree_metrics(assemble_skeleton(g, p, 42))
         for key, target in targets.items():
@@ -92,9 +110,21 @@ def main(argv=None):
     ap.add_argument("--seed", type=int, default=1)
     ap.add_argument("--workers", type=int, default=7)
     ap.add_argument("--out", default=str(ROOT / "out" / "buds" / "calib.json"))
+    ap.add_argument("--around", help="an earlier result file to sample near")
+    ap.add_argument("--top", type=int, default=5, help="how many of its best results to sample near")
+    ap.add_argument("--local", type=float, default=0.5, help="share of samples drawn near them")
+    ap.add_argument("--spread", type=float, default=0.12, help="perturbation, as a fraction of each range")
     args = ap.parse_args(argv)
     rng = random.Random(args.seed)
-    jobs = [(_sample(rng), args.species) for _ in range(args.samples)]
+    bases = []
+    if args.around:
+        bases = [r["params"] for r in json.loads(Path(args.around).read_text())[: args.top]]
+    jobs = []
+    for i in range(args.samples):
+        if bases and rng.random() < args.local:
+            jobs.append((_near(rng, rng.choice(bases), args.spread), args.species))
+        else:
+            jobs.append((_sample(rng), args.species))
     results = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         for i, (sets, err, detail, dt) in enumerate(pool.map(_score, jobs), 1):

@@ -47,7 +47,7 @@ from .growth import ALIVE, SHED, GrowthResult
 from .light import LightField, neighbour_bounds
 from .util import UP, depth_levels, hash01, normalize
 
-MAX_LIVE = 400_000           # a runaway budget is a calibration error, not a tree
+MAX_LIVE = 1_500_000         # a runaway budget is a calibration error, not a tree (a 200-year oak: ~0.7 M)
 MAX_SHOOT = 12               # internodes one bud may add in a season
 MAX_GRID = 128               # light grid cells along the longest axis
 MIN_CELL = 0.4               # m; light cells no finer than this (the paper: about one internode)

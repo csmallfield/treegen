@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: 2026-10-14. Shadow propagation in and calibrated to age 80 (section 15); 200 years blocked on node count.
+Status: 2026-10-15. 200 years reachable and calibrated with all three ages scored (section 16).
 
 ## 1. Why
 
@@ -552,3 +552,33 @@ Open:
 - Young trunks too thin (0.09 m at 20 y against 0.16) and inner fork gaps short
   of 2 m in every top sample.
 - `leaf_area` is not used by the shadow model; foliage is implicit in the buds.
+
+## 16. Two hundred years (2026-10-15)
+
+**Reaching it.** Shed wood outnumbered live wood many times over (2.5 million
+to 0.3 million at 120 years) and was walked every season. It now moves to an
+archive at the end of each season (every node has a permanent `uid`; the tree is
+reassembled in creation order at the end). Only shed wood that lived at least
+10 years is kept in the output (half of all shed wood lived two years or less;
+its rings are already counted in the wood below): a 200-year tree went from
+11.6 million output nodes and a 581 MB cache file to 1.2 million and 62 MB.
+Merging old unbranched wood was measured first and rejected: only 10-13% of
+live nodes qualify. 200 years now runs in 35-80 s; downstream stages take about
+5 s. The live-node cap is 1.5 million.
+
+**Calibrating all three ages.** `bud_calibrate.py` now scores 20, 80 and 200
+years, and can sample near earlier results (`--around`). 140 samples, half near
+the best six of section 15: 94 grew a viable tree. Best combined error 2.48
+(0.88 when only 20 and 80 were scored).
+
+Systematic in every top sample, so limits of the model as it stands rather than
+of the parameters:
+
+- inner fork gap at 200 years 0.3-0.6 m (target 2 m);
+- DBH at 20 years 0.08-0.11 m (target 0.16).
+
+Height, crown width and DBH at 200 years are reachable together (rank 3: 31.9 m
+tall, 31.8 m wide, 1.9 m DBH, a clean 5.4 m bole and a broad dome). No sample is
+right at every age: rank 3 is forest-like and narrow at 80 years; rank 0 is airy
+and photo-like at 80 but leans heavily at 200. `species/quercus_buds.toml` still
+holds the section 15 parameters.
