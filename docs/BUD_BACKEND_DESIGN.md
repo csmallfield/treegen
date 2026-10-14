@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: 2026-10-13. B0 and B1 done. B2 mechanisms built; B2 is not passed (section 11).
+Status: 2026-10-14. B0 and B1 done. B2 not passed after the agreed extra round (section 12): stop and reassess.
 
 ## 1. Why
 
@@ -379,3 +379,55 @@ Next, in order, if the work continues:
 2. Recalibrate the radii stage for fine internodes.
 3. Then return to the section 7 targets, starting with the clear trunk, and
    decide adopt / reassess.
+
+## 12. B2, second round (2026-10-14): stop and reassess
+
+Agreed scope: make 200 years affordable, recalibrate thickness, go after the
+clear trunk; if a 200-year oak is not in reach after that, stop and reassess.
+
+**Performance, done.** Light sampling was 58 of 60 s at 80 y. Sampling once per
+occupied light cell, with cells no finer than 0.4 m (the paper: about one
+internode; a resolution departure only), took 80 y from 60 s to 18 s. The node
+cap now counts live nodes. 200 y runs in 140 s.
+
+**The 200-year tree** (same candidate as section 11):
+
+| Age | Live / total nodes | Height / width | First fork | Crown base | DBH | Time |
+| --- | --- | --- | --- | --- | --- | --- |
+| 20 | 3,827 / 7,628 | 7.9 / 5.6 m | 0.1 m | 0.9 m | 0.36 m | 0.3 s |
+| 80 | 28,236 / 242,969 | 27.1 / 19.7 m | 0.8 m | 3.7 m | 2.02 m | 20 s |
+| 200 | 40,539 / 1,409,573 | 56.9 / 27.6 m | 15.2 m | 18.2 m | 5.43 m | 140 s |
+
+At 200 years the tree is a 57 m pole with a 15 m clear bole and its crown in a
+shell at the top. Three causes, each measured:
+
+- **Height has no limit in the model.** Allocation keeps feeding the leader and
+  nothing in the paper's model stops a tree growing taller. In real trees the
+  established explanation is hydraulic limitation (water transport gets harder
+  with height; Ryan and Yoder 1997, Koch et al. 2004). That is outside the
+  paper, and it was removed from this design at B0 for that reason.
+- **Self-shading empties the old crown**, as in the colonization model: the
+  inside and the bottom shed, the crown survives as a shell on top.
+- **The pipe memory never forgets.** The paper keeps the pipes of shed
+  branches, but with 1.4 million internodes grown and shed in 200 years that
+  memory gives a 5.4 m trunk. Recalibrating the tip radius (4 mm instead of
+  10 mm) only scales this.
+
+**Branching texture, not reached.** Forks every 0.2-0.4 m at every scale, and no
+clear trunk in the open field at 20-80 y. More realistic leaf area (leaf area
+index was 12; a real oak is 4-6) does not change it. Acrotony (`lateral_buds`,
+added as a species trait) cannot act at this resolution: a season's shoot is
+only 1-4 internodes of 10 cm, while a real oak shoot has 5-15 nodes.
+
+**Assessment.** The model does what the paper describes, and some of it is
+genuinely better than colonization: straight limbs and no whips with no rule
+for either, bare inner limbs with tufted ends at 80 y. But at a resolution this
+pipeline can afford, it does not produce an oak, and old age fails for reasons
+the paper does not cover (height, pipe memory) plus the same crown-emptying as
+before. Reaching an oak would need, at least: a hydraulic height limit, a
+bounded pipe memory, and finer internodes (several times the nodes and cost) so
+that architectural traits such as acrotony can act. Each is defensible science;
+together they are a research project with an uncertain outcome.
+
+The bud backend stays in the repository, selectable and off by default, with
+its tests. Nothing in the colonization oak depends on it.
