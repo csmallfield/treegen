@@ -96,6 +96,9 @@ SCHEMA: list[Param] = [
     P("buds", "leaf_area", 0.2, lo=0, hi=5, unit="m2",
       doc="Leaf area on each leaf-bearing node (last season's shoots and axis ends); sets how much "
           "the tree shades itself"),
+    P("buds", "lateral_buds", 0, "int", lo=0, hi=20,
+      doc="Acrotony: only the last this-many nodes of each season's shoot carry a lateral bud, so "
+          "branching clusters at the end of each year's growth (strong in oak). 0 = a bud on every node"),
     P("buds", "branching_angle", 45.0, lo=5, hi=90, unit="deg",
       doc="Angle of a lateral bud to the internode it sits on"),
     P("buds", "phyllotaxis", 137.5, lo=0, hi=360, unit="deg",

@@ -12,6 +12,11 @@ axis ends in a terminal bud. Each season:
                   shoot_length * v / floor(v); below 1 it stays dormant
     5. direction  each internode = default orientation + xi * V + eta * up
 
+Acrotony (an architectural trait of the species, like phyllotaxis): with
+lateral_buds = k > 0, only the last k nodes of each season's shoot carry a lateral
+bud, so branching clusters at the end of each year's growth and the rest of the
+shoot stays bare. Oaks are strongly acrotonic. k = 0 puts a bud on every node.
+
 Between gathering and allocating, a branch whose gathered light per internode is
 below shed_threshold is shed with its buds (Takenaka 1994, as in the paper): it
 costs the tree more than it earns. Apical control lambda moves from its young to
@@ -37,9 +42,10 @@ from .growth import ALIVE, SHED, GrowthResult
 from .light import LightField, neighbour_bounds
 from .util import UP, depth_levels, hash01, normalize
 
-MAX_NODES = 400_000          # a runaway budget is a calibration error, not a tree
+MAX_LIVE = 400_000           # a runaway budget is a calibration error, not a tree
 MAX_SHOOT = 12               # internodes one bud may add in a season
 MAX_GRID = 128               # light grid cells along the longest axis
+MIN_CELL = 0.4               # m; light cells no finer than this (the paper: about one internode)
 
 
 class _Grow:
@@ -106,6 +112,23 @@ def _field(params, scene, pos, leafy, hscale, cell):
                             L["ray_count"], L["sky_bias"], hscale)
 
 
+def _sample_by_cell(field_, pts):
+    """Exposure and light direction at pts, sampled once per occupied grid cell.
+
+    Light sampling is nearly all of the model's cost, buds crowd into the same cells,
+    and the field cannot tell points inside one cell apart anyway.
+    """
+    idx = np.floor((pts - field_.origin) / field_.voxel).astype(np.int64)
+    idx = np.clip(idx, 0, field_.shape - 1)
+    key = (idx[:, 0] * field_.shape[1] + idx[:, 1]) * field_.shape[2] + idx[:, 2]
+    cells, inverse = np.unique(key, return_inverse=True)
+    first = np.zeros(len(cells), np.int64)
+    first[inverse] = np.arange(len(pts))
+    centre = field_.origin + (idx[first] + 0.5) * field_.voxel
+    q, v = field_.sample(centre)
+    return q[inverse], v[inverse]
+
+
 def _shed(nodes, N, levels, Q, threshold, year):
     """Mark branches whose light per internode is below threshold; returns the shed mask or None.
 
@@ -144,6 +167,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     shed_thr, max_age = B["shed_threshold"], params["meta"]["max_age"]
     shoot, xi, eta = B["shoot_length"], B["light_weight"], B["tropism"]
     angle, phyllo = math.radians(B["branching_angle"]), math.radians(B["phyllotaxis"])
+    acro = int(B["lateral_buds"])
     seasons = int(math.floor(age))
 
     nodes = _Grow({
@@ -176,9 +200,9 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         leafy[nodes.birth[:N] >= year - 1] = True
         leafy[bnode[buds.terminal[:M]]] = True
         leafy &= live
-        field_ = _field(params, scene, pos, leafy, hscale, shoot * 1.5)
+        field_ = _field(params, scene, pos, leafy, hscale, max(MIN_CELL, shoot * 1.5))
         with_bud = np.unique(bnode)
-        q_s, v_s = field_.sample(pos[with_bud])
+        q_s, v_s = _sample_by_cell(field_, pos[with_bud])
         q_node = np.zeros(N)
         q_node[with_bud] = q_s
         vdir = np.tile(UP, (N, 1))
@@ -224,8 +248,8 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         go = np.flatnonzero((count >= 1) & (buds.birth[:M] < year))
         if len(go) == 0:
             continue
-        if N + int(count[go].sum()) > MAX_NODES:
-            raise RuntimeError(f"bud model passed {MAX_NODES} nodes at year {year}: "
+        if int((nodes.state[:N] == ALIVE).sum()) + int(count[go].sum()) > MAX_LIVE:
+            raise RuntimeError(f"bud model passed {MAX_LIVE} live nodes at year {year}: "
                                "lower buds.resource_per_light or raise buds.shoot_length")
         count_g = count[go]
         length = shoot * vb[go] / count_g
@@ -250,11 +274,14 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
             nodes.main[s] = ~starts_axis
             # phyllotaxis runs along an axis; a new axis starts at its own (seeded) azimuth
             nodes.phi[s] = np.where(starts_axis, 2 * math.pi * hash01(ids, seed, 23), nodes.phi[p] + phyllo)
-            sb = buds.reserve(len(act))                             # one lateral bud per new node
-            buds.node[sb] = ids
-            buds.dir[sb] = _lateral_dir(d, nodes.phi[s], angle)
-            buds.terminal[sb] = False
-            buds.birth[sb] = year
+            # one lateral bud per new node, or (acrotony) only on the shoot's last nodes
+            budded = np.ones(len(act), bool) if acro == 0 else (count_g[act] - k <= acro)
+            if budded.any():
+                sb = buds.reserve(int(budded.sum()))
+                buds.node[sb] = ids[budded]
+                buds.dir[sb] = _lateral_dir(d[budded], nodes.phi[s][budded], angle)
+                buds.terminal[sb] = False
+                buds.birth[sb] = year
             cur[act], cur_dir[act] = ids, d
         # the bud that grew now sits at the end of its shoot as that axis's terminal bud
         buds.node[go], buds.dir[go], buds.terminal[go] = cur, cur_dir, True
@@ -270,8 +297,9 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         leafy = nodes.birth[:N] >= seasons - 1
         leafy[buds.node[: buds.n][buds.terminal[: buds.n]]] = True
         leafy &= nodes.state[:N] == ALIVE
-        field_ = _field(params, scene, pos, leafy, age_state(params, float(age)).height_mult, shoot * 1.5)
-        expo, ldir = field_.sample(pos)
+        field_ = _field(params, scene, pos, leafy, age_state(params, float(age)).height_mult,
+                        max(MIN_CELL, shoot * 1.5))
+        expo, ldir = _sample_by_cell(field_, pos)
         stats["grid"] = list(field_.density.shape)
     stats.update(nodes=N, alive=int((nodes.state[:N] == ALIVE).sum()), buds=int(buds.n))
     return GrowthResult(
