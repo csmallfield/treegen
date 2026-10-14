@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: 2026-10-15. 200 years reachable and calibrated with all three ages scored (section 16).
+Status: 2026-10-15. Open-field oak adopted (rank 3, section 16); shadow fade checked (section 17). Next: forest and edge scenes (B3).
 
 ## 1. Why
 
@@ -582,3 +582,28 @@ tall, 31.8 m wide, 1.9 m DBH, a clean 5.4 m bole and a broad dome). No sample is
 right at every age: rank 3 is forest-like and narrow at 80 years; rank 0 is airy
 and photo-like at 80 but leans heavily at 200. `species/quercus_buds.toml` still
 holds the section 15 parameters.
+
+**Adopted:** rank 3, chosen by the user by eye at both 80 and 200 years, is now
+`species/quercus_buds.toml`.
+
+## 17. Are the shadows too short? (2026-10-15)
+
+With the paper's fade (`b` = 2) a bud's shadow is down to 1/256 eight layers
+(about 2.7 m) below it, so a large crown barely shades its own lower half. That
+was a candidate for the forest-like 80-year form.
+
+- Longer shadows with everything else fixed (same total shadow per bud, reach
+  4.0 / 5.4 / 6.7 m): worse. At 4 m a candelabra of bare wavy stems with tufts at
+  80 years; at 5.4-6.7 m dense and over-thick (DBH 2.9-3.6 m at 200 years).
+  The 4 m tree scored better than rank 3 on inner fork gap only because its stems
+  were bare: a single measure is not a substitute for looking.
+- Search with the fade free (1.2-2.5) around rank 3, 100 samples, 75 viable:
+  the 15 best all chose 1.6-2.25, clustered at 2.0, reaching 1.4-3.1 m. Long
+  shadows were among the runaways (over a million live nodes).
+
+Conclusion: the paper's fade stands; shadow reach is not what makes the 80-year
+crown narrow. Rank 3 is kept (the new runner-up, `b` = 1.79, is a close cousin;
+the new best scores lower only with a 3.2 m trunk at 200 years).
+
+`bud_calibrate.py` now scores a failed sample instead of stopping, and saves
+results every 20 samples.

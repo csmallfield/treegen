@@ -30,7 +30,8 @@ SPACE = {
     "buds.apical_control": (0.46, 0.54, False),
     "buds.apical_control_old": (0.42, 0.50, False),
     "buds.resource_per_light": (2.5, 6.0, True),
-    "buds.shadow_depth": (3, 8, False),
+    "buds.shadow_depth": (3, 12, False),
+    "buds.shadow_b": (1.2, 2.5, False),
     "buds.shadow_cell": (0.18, 0.35, False),
     "buds.light_weight": (0.0, 0.6, False),
     "buds.branching_angle": (30.0, 60.0, False),
@@ -69,6 +70,14 @@ def _near(rng, base, spread):
 
 
 def _score(job):
+    """Score one sample; any error in growing or measuring it scores as a failed tree."""
+    try:
+        return _score_one(job)
+    except Exception as e:                                          # noqa: BLE001
+        return job[0], 99.0, {"failed": f"{type(e).__name__}: {e}"}, 0.0
+
+
+def _score_one(job):
     sets, species = job
     sys.path.insert(0, str(ROOT))
     from treegen.core.buds import grow_buds
@@ -93,8 +102,8 @@ def _score(job):
         m = tree_metrics(assemble_skeleton(g, p, 42))
         for key, target in targets.items():
             v = m[key]
-            if key in ("first_fork", "fork_gap_inner"):
-                e = math.log((v + 0.5) / (target + 0.5))
+            if key in ("first_fork", "fork_gap_inner"):                 # a limb can droop below 0
+                e = math.log((max(v, 0.0) + 0.5) / (target + 0.5))
             else:
                 e = math.log(max(v, 1e-3) / target)
             err += e * e
@@ -131,6 +140,8 @@ def main(argv=None):
             results.append({"error": round(err, 3), "params": sets, "metrics": detail, "seconds": round(dt, 1)})
             if i % 20 == 0:
                 print(f"{i}/{len(jobs)} done", flush=True)
+                Path(args.out).parent.mkdir(parents=True, exist_ok=True)       # keep partial results
+                Path(args.out).write_text(json.dumps(sorted(results, key=lambda r: r["error"]), indent=1))
     results.sort(key=lambda r: r["error"])
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(results, indent=1))
