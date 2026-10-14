@@ -93,6 +93,9 @@ SCHEMA: list[Param] = [
           "leader-dominated young tree can become a spreading old one"),
     P("buds", "shed_threshold", 0.0, lo=0, hi=1,
       doc="A branch gathering less light than this per internode is shed. 0 = never"),
+    P("buds", "shed_max_diameter", 0.0, lo=0, hi=1, unit="m",
+      doc="Branch autonomy: only branches thinner than this are judged on their light; thicker ones "
+          "are shed only once they carry no live buds. 0 = every branch is judged"),
     P("buds", "leaf_area", 0.2, lo=0, hi=5, unit="m2",
       doc="Leaf area on each leaf-bearing node (last season's shoots and axis ends); sets how much "
           "the tree shades itself"),

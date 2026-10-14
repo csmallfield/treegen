@@ -9,7 +9,8 @@ Targets are for an open-grown Quercus robur:
           (0.16 m at 20 y, 0.64 m at 80 y, 1.6 m at 200 y; old trees slow down)
   height  mature open-grown oaks are typically 20-30 m, rarely above 35 m
   fork    first major fork 2-5 m in the open (the winter reference photo)
-  inner   wood between visible forks on scaffold limbs, 2.5 m or more
+  gap     wood between forks on limbs at least 5 cm thick, judged by thickness (the smaller
+          side at least a quarter of the parent): 2 m or more (the approved colonization oak: 2.1 m)
 Each age runs in its own process.
 """
 from __future__ import annotations
@@ -79,7 +80,7 @@ def main(argv=None):
         results = list(pool.map(_run, jobs))
 
     print(f"{args.scene}  " + "  ".join(f"{k}={v}" for k, v in overrides))
-    print(f"{'age':>5} {'DBH':>12} {'height':>16} {'width':>6} {'1st fork':>9} {'inner':>6} "
+    print(f"{'age':>5} {'DBH':>12} {'height':>16} {'width':>6} {'1st fork':>9} {'gap in/out':>11} "
           f"{'branches':>8} {'whips':>5} {'live/total nodes':>18} {'time':>7}")
     for age, m, err, dt in results:
         if m is None:
@@ -87,7 +88,7 @@ def main(argv=None):
             continue
         dbh_t, (h_lo, h_hi) = TARGETS.get(age, (float("nan"), (0, 0)))
         print(f"{age:5g} {m['dbh']:5.2f} ({dbh_t:4.2f}) {m['height']:5.1f} ({h_lo:g}-{h_hi:g}) {m['crown_width']:6.1f} "
-              f"{m['first_fork']:9.1f} {m['stick_inner']:6.2f} {m['branches']:8d} {m['whips']:5d} "
+              f"{m['first_fork']:9.1f} {m['fork_gap_inner']:5.2f}/{m['fork_gap_outer']:4.2f} {m['branches']:8d} {m['whips']:5d} "
               f"{m['live']:8d}/{m['total']:<9d} {dt:6.1f}s")
     return 0
 

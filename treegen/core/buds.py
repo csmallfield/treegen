@@ -134,12 +134,17 @@ def _sample_by_cell(field_, pts):
     return q[inverse], v[inverse]
 
 
-def _shed(nodes, N, levels, Q, threshold, year):
+def _shed(nodes, N, levels, Q, threshold, year, max_ring=np.inf):
     """Mark branches whose light per internode is below threshold; returns the shed mask or None.
 
     A branch is a lateral axis with everything it carries. Its size is its internode
-    count. The main stem is never shed. The tips a shed branch carried are remembered
-    on the node it left, so the wood below keeps the thickness it grew to support.
+    count. Branch autonomy (Sprugel et al. 1991): the decision is made by small units,
+    so only branches whose base is thinner than max_ring (in ring units) are judged on
+    their light; thicker wood goes only once it carries no live buds at all. Judging
+    big limbs as a whole fails, because a limb carries far more wood per leaf than a
+    twig and so always looks poorer than the shaded twigs it should outlive.
+    The main stem is never shed. The tips a shed branch carried are remembered on the
+    node it left, so the wood below keeps the thickness it grew to support.
     """
     par = nodes.parent[:N]
     live = nodes.state[:N] == ALIVE
@@ -150,7 +155,8 @@ def _shed(nodes, N, levels, Q, threshold, year):
     for lvl in reversed(levels[1:]):
         np.add.at(size, par[lvl], size[lvl])
         np.add.at(tips, par[lvl], tips[lvl])
-    base = live & ~nodes.main[:N] & (Q < threshold * size)
+    small = nodes.ring[:N] < max_ring
+    base = live & ~nodes.main[:N] & np.where(small, Q < threshold * size, Q <= 0.0)
     base[0] = False
     if not base.any():
         return None
@@ -174,6 +180,10 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     angle, phyllo = math.radians(B["branching_angle"]), math.radians(B["phyllotaxis"])
     acro = int(B["lateral_buds"])
     h_max = B["max_height"]
+    max_ring = np.inf                         # the shed diameter limit, in ring units (tip-years)
+    if B["shed_max_diameter"] > 0:
+        R_ = params["radii"]
+        max_ring = (B["shed_max_diameter"] / (2 * R_["tip_radius"])) ** R_["pipe_exponent"]
     seasons = int(math.floor(age))
 
     nodes = _Grow({
@@ -225,7 +235,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
 
         # ---- shed branches that gather too little light for their size --------------------------
         if shed_thr > 0:
-            shed = _shed(nodes, N, levels, Q, shed_thr, year)
+            shed = _shed(nodes, N, levels, Q, shed_thr, year, max_ring)
             if shed is not None:
                 stats["shed_nodes"] += int(shed.sum())
                 buds.keep(~shed[bnode])

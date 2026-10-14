@@ -45,6 +45,7 @@ def tree_metrics(sk) -> dict:
             whips += ld > 150
 
     stick_inner, stick_mid = _sticks(sk)
+    gap_inner, gap_outer = _fork_gaps(sk)
 
     lp = pts[live]
     rad = np.hypot(lp[:, 0], lp[:, 2])
@@ -62,6 +63,8 @@ def tree_metrics(sk) -> dict:
         "limb_ld_p95": float(np.percentile(slender, 95)) if slender else 0.0,
         "stick_inner": stick_inner,
         "stick_mid": stick_mid,
+        "fork_gap_inner": gap_inner,
+        "fork_gap_outer": gap_outer,
     }
 
 
@@ -117,3 +120,47 @@ def _sticks(sk):
                     stack.append(int(c))
     med = lambda v: float(np.median(v)) if v else 0.0           # noqa: E731
     return med(inner), med(mid)
+
+
+def _fork_gaps(sk, ratio: float = 0.25, inner_radius: float = 0.05):
+    """Median wood length between forks judged by thickness: (inner, outer).
+
+    A fork counts when its smaller side is at least `ratio` of the parent's radius, so
+    the measure does not depend on how finely a model divides its twigs (unlike the
+    tip-count sticks above). Inner wood starts at least `inner_radius` thick.
+    """
+    P = len(sk.points)
+    par = np.full(P, -1)
+    alias = np.zeros(P, bool)
+    for c in range(sk.curve_count):
+        a, b = sk.offsets[c], sk.offsets[c + 1]
+        par[a + 1:b] = np.arange(a, b - 1)
+        if c > 0:
+            alias[a] = True
+            if b - a > 1:
+                par[a + 1] = sk.parent_point[c]
+    real = np.flatnonzero((par >= 0) & ~alias)
+    seg = np.zeros(P)
+    seg[real] = np.linalg.norm(sk.points[real] - sk.points[par[real]], axis=1)
+    kids: dict = {}
+    for i in real:
+        kids.setdefault(int(par[i]), []).append(int(i))
+    r = sk.radius
+    inner, outer = [], []
+    stack = [int(sk.offsets[0])]
+    while stack:
+        k = stack.pop()
+        r0, length = r[k], 0.0
+        while True:
+            ks = sorted(kids.get(k, []), key=lambda c: -r[c])
+            if not ks or (len(ks) > 1 and r[ks[1]] >= ratio * r[k]):
+                break
+            k = ks[0]
+            length += seg[k]
+        if length > 0:
+            (inner if r0 >= inner_radius else outer).append(length)
+        ks = kids.get(k, [])
+        if len(ks) > 1:
+            stack.extend(c for c in ks if r[c] >= ratio * r[k])
+    med = lambda v: float(np.median(v)) if v else 0.0           # noqa: E731
+    return med(inner), med(outer)
