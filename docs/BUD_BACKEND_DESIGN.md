@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: 2026-10-14. Parked after B2 (sections 11-13). The backend stays in the repository, off by default.
+Status: 2026-10-14. Resumed (section 14): thickness and height calibrated; branching texture blocked on light contrast.
 
 ## 1. Why
 
@@ -448,3 +448,64 @@ height or acrotony: bound that memory (a shed branch's contribution fading over
 the years after it is shed, as its pipes stop carrying sap), measured against
 DBH targets for an open-grown oak at 20, 80 and 200 years. Then the hydraulic
 height limit, then finer internodes.
+
+## 14. Resumed (2026-10-14): thickness and height done, branching blocked on light
+
+Evaluated with `scripts/bud_eval.py` (open field, ages 20 / 80 / 200, targets for
+open-grown oak in the script's docstring).
+
+**Thickness: annual rings (Pressler's law).** Counting every tip ever grown as a
+full pipe made a 2-year twig weigh as much as a century-old limb, and DBH ran 2-3x
+too high, worsening with age. Now each node lays down a ring each season in
+proportion to the tips it carries (`GrowthResult.ring_area`, used by the radii
+stage when present). Fitted on saved trees: `pipe_exponent` 2.8 (the paper: 2 to
+3) and `tip_radius` 4.5 mm (a 9 mm current-year shoot).
+
+**Height: hydraulic limitation** (Ryan and Yoder 1997; Koch et al. 2004).
+`buds.max_height`: a bud's light earns resource in proportion to
+(1 - height / max_height). Applied to resource only; applying it to the light
+used for shedding made high branches look starved and collapsed old crowns.
+At 45 m:
+
+| Age | DBH (target) | Height (target) | Crown width |
+| --- | --- | --- | --- |
+| 20 | 0.16 m (0.16) | 7.9 m (6-10) | 5.6 m |
+| 80 | 0.69 m (0.64) | 19.7 m (18-26) | 22.7 m |
+| 200 | 1.65 m (1.60) | 30.4 m (22-32) | 54.0 m (too wide) |
+
+**Branching texture: not solved; the cause is now clear.**
+
+- New metric `fork_gap_inner` / `fork_gap_outer`: wood between forks judged by
+  thickness (smaller side >= 1/4 of the parent's radius; inner = wood >= 5 cm),
+  so it reads the same at any model resolution. Approved colonization oak:
+  2.1 m inner. Bud oak: 0.5-0.6 m.
+- Stronger apical control: young trees far too tall (13-20 m at 20 y), forks
+  unchanged.
+- Acrotony with one bud per shoot: 0.5 -> 0.6 m.
+- Shedding threshold: knife-edge between twiggy (0.15-0.25) and a pole of a few
+  hundred nodes (0.3+).
+- Diagnosis on the saved 80-year tree: small inner branches have *more* light per
+  internode than big limbs (median 0.24 vs 0.18), because limbs carry more wood
+  per leaf. The paper's criterion therefore kills limbs before twigs.
+- Mean leaf light per branch (branch autonomy) does not separate them either
+  (0.29 vs 0.32). Restricting judgement to thin branches
+  (`buds.shed_max_diameter`, added, off) still collapses young trees, whose
+  every branch is thin.
+- Underlying: almost every branch sees light between about 0.2 and 0.35. With so
+  little contrast, any threshold sheds almost nothing or almost everything.
+
+The likely reason is treegen's main departure from the paper (section 3.7): the
+smooth hemisphere ray-marched occlusion field on 0.4 m cells in place of the
+paper's shadow propagation, in which each bud casts a pyramid of shadow on the
+cells below it. The paper notes its shedding criterion is meant for that model.
+Shadow propagation gives sharp local contrast (dark inside a crown, bright at its
+skin), which is what shedding needs.
+
+Leaf area index also varies with age (13.6 at 20 y, 4.3 at 80 y, 1.9 at 200 y;
+real oaks about 4-6 throughout), so foliage per leaf-bearing node is not yet
+consistent across sizes.
+
+**Next:** implement the paper's shadow propagation as the bud model's light, as
+specified in its section 4.1 (`q_max` 4-8 layers, shadow `a * b^-q`, exposure
+`max(C - s + a, 0)`, cells about one internode), keep the occlusion field only
+for neighbour proxies, then re-run the shedding and fork-gap measurements.
