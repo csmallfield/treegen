@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: 2026-10-14. B0 and B1 done. B2 not passed after the agreed extra round (section 12): stop and reassess.
+Status: 2026-10-14. Parked after B2 (sections 11-13). The backend stays in the repository, off by default.
 
 ## 1. Why
 
@@ -431,3 +431,20 @@ together they are a research project with an uncertain outcome.
 
 The bud backend stays in the repository, selectable and off by default, with
 its tests. Nothing in the colonization oak depends on it.
+
+## 13. Parked (2026-10-14)
+
+Decision: stop here, as agreed for the time-boxed round, and return to the
+colonization oak. The bud backend stays selectable and tested.
+
+The user's read of the results, to start from when this resumes: the model is
+fundamentally heading in the right direction, and the most visible problem is
+thickness. The trunk is far too thick and that excess carries down through the
+whole branch hierarchy, so every limb reads heavier than it should.
+
+That matches section 12: the pipe memory keeps every shed internode, and over
+200 years that is 1.4 million of them. Suggested first step on resuming, before
+height or acrotony: bound that memory (a shed branch's contribution fading over
+the years after it is shed, as its pipes stop carrying sap), measured against
+DBH targets for an open-grown oak at 20, 80 and 200 years. Then the hydraulic
+height limit, then finer internodes.

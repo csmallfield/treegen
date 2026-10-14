@@ -435,6 +435,17 @@ bud-based backend (Palubicki et al. 2009) as a second growth model, judged on th
 same metrics. Proposal: `docs/BUD_BACKEND_DESIGN.md`. The experimental settings from
 the last three commits stay off; `species/quercus.toml` in git is the approved oak.
 
+### Bud backend parked (2026-10-14)
+
+Built to B2 and parked after a time-boxed round; see `docs/BUD_BACKEND_DESIGN.md`
+sections 10-13. Selectable with `growth.model = "buds"` (`species/quercus_buds.toml`),
+off for every shipped species. The user judges it to be heading in the right
+direction; the first thing to fix on resuming is trunk thickness (unbounded pipe
+memory of shed wood), which makes every limb read too heavy.
+
+Back on the colonization oak. Next, as agreed: the geometry-stage twig-cluster pass,
+then the birch; 200-year crowns stay a known limitation.
+
 ## 6. Working agreements from the session
 
 - Commit messages follow the user's global rules: imperative subject of 50 characters
