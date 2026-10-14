@@ -11,17 +11,22 @@ max_age = 200
 model = "buds"
 
 [buds]
+# calibrated by scripts/bud_calibrate.py (best of 140 samples against open-grown oak targets)
+light_model = "shadow"      # the paper's shadow propagation
+shadow_a = 0.0822
+shadow_b = 2.0
+shadow_depth = 4
+shadow_cell = 0.243
 shoot_length = 0.1          # m of internode per unit of resource
-resource_per_light = 4.0    # alpha
-apical_control = 0.52       # lambda when young: a leader
-apical_control_old = 0.45   # lambda at max_age: a spreading crown
-shed_threshold = 0.15       # light per internode below which a branch goes
-leaf_area = 0.15            # m2 of leaf per leaf-bearing node
+resource_per_light = 3.2263
+apical_control = 0.5317
+apical_control_old = 0.4865
+shed_threshold = 0.2432
+max_height = 45.0           # m; hydraulic limit
 lateral_buds = 0            # acrotony off
-max_height = 45.0           # m; hydraulic limit (Q. robur rarely exceeds 40 m)
-branching_angle = 45
+branching_angle = 32.9214
 phyllotaxis = 137.5
-light_weight = 0.2          # xi
+light_weight = 0.3126
 tropism = 0.1               # eta, positive = up
 
 [architecture]

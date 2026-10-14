@@ -3,6 +3,7 @@
     python scripts/bud_eval.py                                     # species/quercus_buds.toml
     python scripts/bud_eval.py --set buds.shed_threshold=0.2       # try a value without editing the TOML
     python scripts/bud_eval.py --scene dense_forest --png out/buds/forest
+    python scripts/bud_eval.py --calib out/buds/calib.json --rank 0   # a result of bud_calibrate.py
 
 Targets are for an open-grown Quercus robur:
   DBH     Mitchell's rule of thumb, about 2.5 cm of girth a year in the open
@@ -69,8 +70,13 @@ def main(argv=None):
     ap.add_argument("--scene", default="open_field")
     ap.add_argument("--ages", default="20,80,200")
     ap.add_argument("--png", help="write a side-view silhouette per age with this path prefix")
+    ap.add_argument("--calib", help="take parameters from a bud_calibrate.py result file")
+    ap.add_argument("--rank", type=int, default=0, help="which result in --calib (0 = best)")
     args = ap.parse_args(argv)
-    overrides = [(k.strip(), json.loads(v)) for k, v in (s.split("=", 1) for s in args.set)]
+    overrides = []
+    if args.calib:
+        overrides += list(json.loads(Path(args.calib).read_text())[args.rank]["params"].items())
+    overrides += [(k.strip(), json.loads(v)) for k, v in (s.split("=", 1) for s in args.set)]
     ages = [float(a) for a in args.ages.split(",")]
     if args.png:
         Path(args.png).parent.mkdir(parents=True, exist_ok=True)

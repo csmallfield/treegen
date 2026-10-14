@@ -1,6 +1,6 @@
 # Bud-based growth backend: design
 
-Status: 2026-10-14. Resumed (section 14): thickness and height calibrated; branching texture blocked on light contrast.
+Status: 2026-10-14. Shadow propagation in and calibrated to age 80 (section 15); 200 years blocked on node count.
 
 ## 1. Why
 
@@ -509,3 +509,46 @@ consistent across sizes.
 specified in its section 4.1 (`q_max` 4-8 layers, shadow `a * b^-q`, exposure
 `max(C - s + a, 0)`, cells about one internode), keep the occlusion field only
 for neighbour proxies, then re-run the shedding and fork-gap measurements.
+
+## 15. Shadow propagation (2026-10-14)
+
+Implemented as the paper specifies (section 4.1): every bud adds `a * b**-q` of
+shadow to the square pyramid of cells `q` layers below it, up to `q_max`;
+exposure is `max(1 - s + a, 0)`; the best direction is down the shadow gradient.
+Pyramids are summed per layer with integral images, so cost follows the grid.
+Neighbour proxies still shade through the occlusion field, multiplied in.
+`buds.light_model = "shadow"`; the occlusion field stays as `"field"`.
+
+Contrast, as predicted: half the wood of a 30-year tree sits at exposure 0, the
+outer tenth at about 0.5 (the occlusion field put nearly everything at 0.2-0.35).
+It is also much faster than ray marching.
+
+Hand scans still hit a knife-edge on `shed_threshold` (bushy at 0.25, a collapsed
+pole at 0.3 for most settings): shedding removes buds, which lowers the resource,
+which grows fewer shoots. So the parameters were searched instead:
+`scripts/bud_calibrate.py`, 140 random samples over nine parameters, each grown at
+20 and 80 years and scored on log errors against the targets. 82 of 140 grew a
+viable tree. The best, now in `species/quercus_buds.toml`:
+
+| | Target | Best sample |
+| --- | --- | --- |
+| Height at 20 / 80 y | 8 / 22 m | 6.8 / 23.9 m |
+| Crown width at 80 y | 22 m | 18.1 m |
+| First fork at 80 y | 3 m | 2.1 m |
+| Fork gap on inner wood at 80 y | 2 m | 1.26 m |
+| DBH at 20 / 80 y | 0.16 / 0.64 m | 0.09 / 0.86 m |
+
+At 80 years it is the most oak-like tree the project has produced: clear trunk to
+about 3 m, ascending limbs spreading into a broad crown, straight wood with
+elbows, fine branching at the ends, with no rule written for any of it.
+
+Open:
+
+- **200 years.** The top samples pass 400,000 live nodes at 140-190 years: at
+  0.1 m internodes an old oak's living wood is that many pieces. A representation
+  problem, not a biological one. Candidate: compact old wood (merge chains of
+  single-child internodes that no longer carry buds) while keeping the light
+  gathered and the internode count the shedding rule needs.
+- Young trunks too thin (0.09 m at 20 y against 0.16) and inner fork gaps short
+  of 2 m in every top sample.
+- `leaf_area` is not used by the shadow model; foliage is implicit in the buds.
