@@ -607,3 +607,34 @@ the new best scores lower only with a 3.2 m trunk at 200 years).
 
 `bud_calibrate.py` now scores a failed sample instead of stopping, and saves
 results every 20 samples.
+
+## 18. Tropism, forest scenes (2026-10-15)
+
+**Tropism.** The user noticed rank 3 looks pulled up rather than growing up and
+sagging. Two upward pulls (tropism +0.1, never searched, and light-seeking, which
+in the open is mostly up) and no downward one during growth; gravity only as a
+refinement droop. Tropism 0 with droop 1.0 gave a far more open-grown 80-year
+oak but 8x the live wood: in the shadow model shade falls straight down, so
+spreading limbs shade each other less and every gain in spread is a gain in
+light. Searched with tropism (-0.15 to 0.15) and droop (0.3 to 1.2) free, 100
+samples: no clear optimum (the 15 best span -0.06 to +0.10, scores 2.1-2.5), but
+a consistent trade-off. Low tropism gives the best 80-year oaks yet (rank 1:
+clean trunk to about 4 m, broad arching limbs, 25 m crown; rank 5: a rounded
+dome), and the same trees overgrow by 200 years (crowns 43-53 m, DBH 2.7-3.8 m).
+Cause: the hydraulic limit (section 14) counts height only, so long horizontal
+limbs are never limited. Next: apply it to path length from the root, which is
+what the hydraulic hypothesis is about (height is its usual case).
+
+**Forest scenes (B3), rank 3, envelope off, 80 years.** Forest edge: crown leans
+2.3 m into the clearing (-0.75 m in the open), with no rule for it. Dense forest:
+cleaner stem, smaller crown, less wood, but no taller than in the open (23.5 vs
+23.7 m) and wider than the open tree at 200 years. Cause in the scene, not the
+model: the neighbour proxies top out near 16 m when this oak is 80, so it grows
+above the stand. A same-age stand should keep pace with the tree.
+
+**Envelope (agreed).** Modes none / guide / mask; the envelope stays in the
+species file's `[envelope]` section as the species' typical open-grown silhouette,
+read by the bud model only in guide or mask mode; per-instance overrides belong
+in the scene. Oak values to be checked against the bud oak's own shape first
+(open-grown proportions: spread ratio about 1.0-1.2, crown base at a quarter to a
+third of height, a broad dome).
