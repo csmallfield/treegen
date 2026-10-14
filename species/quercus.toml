@@ -48,6 +48,9 @@ foliage_density = 2.0
 [geometry]
 mesh_orders = [0, 1, 2, 3, 4]   # every limb >= min_radius_for_mesh is a tube, whatever its order
 radial_segments = { min = 6, max = 24 }
+cluster_twigs = 5          # tufts of short twigs at every branch tip
+cluster_length = 0.25
+cluster_spread = 35
 
 [materials]
 order_ranges = [[0,1,"bark_mature"], [2,4,"bark_young"]]

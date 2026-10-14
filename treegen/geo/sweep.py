@@ -3,6 +3,9 @@
 - Mesh orders (default 0-1): swept tubes on parallel-transport frames, radial
   segment count adaptive to base radius, tip caps, flat base cap on the trunk.
 - Everything else: linear BasisCurves (renderers ray-trace curves natively).
+- Twig clusters: a fan of short twigs at every live branch tip, below the
+  simulation's node spacing (the tufts at the end of a winter oak's shoots).
+  Geometry only: bound to the tip's skeleton point, so they rebind with it.
 - UVs in metres: U around the sweep (circumference of the branch base), V = arc length.
 - Every point carries skelPointIndex + skelLocalOffset for FX rebinding.
 """
@@ -12,6 +15,7 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from ..core.util import hash01
 from .frames import parallel_transport
 
 
@@ -39,6 +43,8 @@ class CurveData:
     skel_index: np.ndarray
     order: np.ndarray            # (C,)
     arc_length: np.ndarray       # (P,)
+    skel_offset: np.ndarray = None   # (P, 3) in the bound point's (T, N, B) frame; None = all zero
+    cluster: np.ndarray = None       # (C,) True for twig-cluster curves
 
 
 @dataclass
@@ -152,11 +158,65 @@ def build_geometry(sk, params: dict, lod: float = 1.0) -> Geometry:
         counts = sk.counts[twig_c]
     else:
         ids, counts = np.zeros(0, np.int64), np.zeros(0, np.int64)
-    twigs = CurveData(sk.points[ids], counts, 2.0 * sk.radius[ids], ids, sk.order[twig_c], sk.arc_length[ids])
+    twigs = CurveData(sk.points[ids], counts, 2.0 * sk.radius[ids], ids, sk.order[twig_c], sk.arc_length[ids],
+                      np.zeros((len(ids), 3)), np.zeros(len(twig_c), bool))
+    clusters = _twig_clusters(sk, frames, G)
+    if clusters is not None:
+        twigs = CurveData(*(np.concatenate([getattr(twigs, f), getattr(clusters, f)])
+                            for f in ("points", "counts", "widths", "skel_index", "order", "arc_length",
+                                      "skel_offset", "cluster")))
 
     stats = {"trunk_faces": len(trunk.face_counts), "branch_faces": len(branches.face_counts),
-             "twig_curves": len(twig_c), "mesh_points": len(trunk.points) + len(branches.points)}
+             "twig_curves": len(twig_c), "cluster_twigs": 0 if clusters is None else len(clusters.counts),
+             "mesh_points": len(trunk.points) + len(branches.points)}
     return Geometry(trunk, branches, twigs, proxy, stats)
+
+
+def _twig_clusters(sk, frames, G):
+    """Short twigs fanned around every live branch tip; None when cluster_twigs is 0.
+
+    Each twig is three points: the tip, a midpoint and an end. Directions sit in a
+    cone of half-angle cluster_spread around the tip's tangent, spaced round it by
+    the golden angle, and bend a little upward toward the end. Widths taper from
+    the tip's own width to 40% of it. Every point is bound to the tip's skeleton
+    point with an offset in that point's (T, N, B) frame, so the published rebind
+    reconstructs the clusters exactly from a deformed skeleton.
+    """
+    n = int(G["cluster_twigs"])
+    if n <= 0 or sk.curve_count == 0:
+        return None
+    T, N, B = frames
+    tip = sk.offsets[1:] - 1
+    keep = (sk.counts >= 2) & ~sk.dead[tip]
+    curves, tip = np.flatnonzero(keep), tip[keep]
+    if len(tip) == 0:
+        return None
+    m = len(tip) * n
+    c_rep, k_rep = np.repeat(curves, n), np.repeat(tip, n)
+    i = np.tile(np.arange(n), len(tip))
+    key = c_rep * 131 + i
+    spread = np.radians(G["cluster_spread"])
+    theta = spread * np.sqrt(0.35 + 0.65 * hash01(key, 0, 31))       # mostly toward the cone's edge: a fan
+    phi = i * np.radians(137.508) + 2 * np.pi * hash01(c_rep, 0, 32)
+    length = G["cluster_length"] * (0.6 + 0.6 * hash01(key, 0, 33))
+    # direction in the tip's (T, N, B) frame, then a little upward bend at the end
+    local = np.stack([np.cos(theta), np.sin(theta) * np.cos(phi), np.sin(theta) * np.sin(phi)], 1)
+    Tk, Nk, Bk = T[k_rep], N[k_rep], B[k_rep]
+    world = local[:, :1] * Tk + local[:, 1:2] * Nk + local[:, 2:3] * Bk
+    up = np.array([0.0, 1.0, 0.0])
+    bent = world + 0.35 * up
+    bent /= np.linalg.norm(bent, axis=1, keepdims=True)
+    mid_w = 0.5 * length[:, None] * world
+    end_w = mid_w + 0.5 * length[:, None] * bent
+    to_local = lambda v: np.stack([(v * Tk).sum(1), (v * Nk).sum(1), (v * Bk).sum(1)], 1)   # noqa: E731
+    offs = np.stack([np.zeros((m, 3)), to_local(mid_w), to_local(end_w)], 1).reshape(-1, 3)
+    base = sk.points[k_rep]
+    pts = np.stack([base, base + mid_w, base + end_w], 1).reshape(-1, 3)
+    w0 = 2.0 * sk.radius[k_rep]
+    widths = np.stack([w0, 0.7 * w0, 0.4 * w0], 1).reshape(-1)
+    arc = sk.arc_length[k_rep][:, None] + np.stack([np.zeros(m), 0.5 * length, length], 1)
+    return CurveData(pts, np.full(m, 3, np.int64), widths, np.repeat(k_rep, 3), sk.order[c_rep] + 1,
+                     arc.reshape(-1), offs, np.ones(m, bool))
 
 
 def rebind_points(skel_points, offsets, parent_curve, parent_point, skel_index, skel_offset):

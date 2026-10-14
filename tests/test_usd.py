@@ -56,3 +56,24 @@ def test_lod_changes_geometry_not_skeleton(small_oak):
     _, sk2, geo2 = pl.geometry(small_oak, Scene(), 11, 40, lod=0.5)
     assert sk1 is sk2
     assert len(geo2.trunk.points) < len(geo1.trunk.points)
+
+
+def test_twig_clusters_rebind_and_are_written(small_oak, tmp_path):
+    import copy
+    g, sk = Pipeline().skeleton(small_oak, Scene(), 11, 40)
+    off = copy.deepcopy(small_oak)
+    off["geometry"]["cluster_twigs"] = 0
+    on = copy.deepcopy(small_oak)
+    on["geometry"].update(cluster_twigs=4, cluster_length=0.3, cluster_spread=30)
+    plain, geo = build_geometry(sk, off), build_geometry(sk, on)
+    tips = int((~sk.dead[sk.offsets[1:] - 1] & (sk.counts >= 2)).sum())
+    assert geo.stats["cluster_twigs"] == 4 * tips and plain.stats["cluster_twigs"] == 0
+    assert np.array_equal(plain.twigs.points, geo.twigs.points[:len(plain.twigs.points)])   # nothing else moves
+    c = geo.twigs
+    back = rebind_points(sk.points, sk.offsets, sk.parent_curve, sk.parent_point, c.skel_index, c.skel_offset)
+    assert np.allclose(back, c.points, atol=1e-9)                   # clusters follow a deformed skeleton
+    files = write_tree(tmp_path / "c.usda", sk, geo, on, {"species": "t", "seed": 11, "age": 40.0})
+    stage = Usd.Stage.Open(str(files[0]))                          # keep the stage alive while reading
+    tw = UsdGeom.PrimvarsAPI(stage.GetPrimAtPath("/Tree/Geom/Twigs"))
+    flags = np.array(tw.GetPrimvar("isCluster").Get())
+    assert flags.sum() == 4 * tips and len(flags) == len(c.counts)

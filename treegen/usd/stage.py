@@ -131,7 +131,10 @@ def write_geometry(stage, geo, sk, params):
     T = Sdf.ValueTypeNames
     V = UsdGeom.Tokens.vertex
     _pv(tw, "skelPointIndex", T.IntArray, Vt.IntArray.FromNumpy(c.skel_index.astype(np.int32)), V)
-    _pv(tw, "skelLocalOffset", T.Vector3fArray, _v3f(np.zeros((len(c.points), 3))), V)
+    offs = c.skel_offset if c.skel_offset is not None else np.zeros((len(c.points), 3))
+    _pv(tw, "skelLocalOffset", T.Vector3fArray, _v3f(offs), V)
+    if c.cluster is not None and c.cluster.any():
+        _pv(tw, "isCluster", T.IntArray, Vt.IntArray.FromNumpy(c.cluster.astype(np.int32)), UsdGeom.Tokens.uniform)
     _pv(tw, "branchOrder", T.IntArray, Vt.IntArray.FromNumpy(c.order.astype(np.int32)), UsdGeom.Tokens.uniform)
     _pv(tw, "arcLength", T.FloatArray, Vt.FloatArray.FromNumpy(c.arc_length.astype(np.float32)), V)
 

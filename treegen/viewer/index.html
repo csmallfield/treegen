@@ -324,7 +324,9 @@ function rebuild() {
     `${meta.scene}  seed ${meta.seed}  age ${meta.age}  ${meta.fast ? "[fast scrub]" : "[exact]"}\n` +
     `${meta.curves} branches   height ${meta.height.toFixed(1)} m   DBH ${meta.dbh.toFixed(2)} m\n` +
     `${(meta.geo_stats.trunk_faces + meta.geo_stats.branch_faces).toLocaleString()} faces   ` +
-    `${meta.geo_stats.twig_curves.toLocaleString()} twig curves   ${meta.elapsed.toFixed(2)} s`;
+    `${meta.geo_stats.twig_curves.toLocaleString()} twig curves` +
+    (meta.geo_stats.cluster_twigs ? ` + ${meta.geo_stats.cluster_twigs.toLocaleString()} in clusters` : "") +
+    `   ${meta.elapsed.toFixed(2)} s`;
 }
 
 // ---------------------------------------------------------------- generate

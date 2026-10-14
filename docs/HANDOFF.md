@@ -446,6 +446,17 @@ memory of shed wood), which makes every limb read too heavy.
 Back on the colonization oak. Next, as agreed: the geometry-stage twig-cluster pass,
 then the birch; 200-year crowns stay a known limitation.
 
+### Twig clusters (2026-10-14, done)
+
+`geometry.cluster_twigs` / `cluster_length` / `cluster_spread`: a fan of short twigs
+at every live branch tip, for the tufts at the end of each year's shoots that the
+0.35 m node spacing cannot resolve. Geometry only (tier 1, live in the viewer), so
+skeleton metrics and the definition-of-done sheet are unchanged (checked). Written
+into `/Tree/Geom/Twigs` with a uniform `isCluster` primvar; every point is bound to the
+tip's skeleton point with a non-zero `skelLocalOffset`, and the published rebind
+reconstructs them exactly (tested). Oak: 5 per tip, 0.25 m, 35 degrees (about 5,000
+cluster twigs at 80 y). Contract note added to `docs/USD_CONTRACT.md`.
+
 ## 6. Working agreements from the session
 
 - Commit messages follow the user's global rules: imperative subject of 50 characters

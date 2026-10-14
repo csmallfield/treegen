@@ -56,6 +56,13 @@ with its attach point on the parent (`parentPointIndex`).
 | `st` | texCoord2f[] | vertex | metres: U around (base circumference), V = arcLength; seam duplicated |
 | `branchOrder` | int[] | uniform | per face (meshes) / per curve (twigs) |
 | `arcLength` | float[] | vertex | copied from the bound skeleton point |
+| `isCluster` | int[] | uniform | Twigs only, when twig clusters are on: 1 for cluster twigs |
+
+Twig clusters (`geometry.cluster_twigs` > 0) are extra three-point curves in
+`/Tree/Geom/Twigs`, fanned around each live branch tip. They are geometry only,
+not part of the skeleton: every point is bound to the tip's skeleton point with a
+non-zero `skelLocalOffset`, so the rebind below reconstructs them. Their
+`branchOrder` is the tip's order plus one; `arcLength` continues from the tip.
 
 ## Frame convention (rebind)
 

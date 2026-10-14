@@ -155,6 +155,12 @@ SCHEMA: list[Param] = [
     # geometry --------------------------------------------------------------
     P("geometry", "mesh_orders", [0, 1], "list", doc="Branch orders swept as meshes; others become BasisCurves"),
     P("geometry", "radial_segments", {"min": 6, "max": 24}, "dict", doc="Adaptive ring resolution"),
+    P("geometry", "cluster_twigs", 0, "int", lo=0, hi=20,
+      doc="Short twigs fanned around every live branch tip, finer than the simulation resolves "
+          "(the tufts at the end of each year's shoots). 0 = off"),
+    P("geometry", "cluster_length", 0.25, lo=0.02, hi=2, unit="m", doc="Mean length of a cluster twig"),
+    P("geometry", "cluster_spread", 35.0, lo=0, hi=90, unit="deg",
+      doc="Half-angle of the cone the cluster twigs fan out in, around the branch tip's direction"),
     # materials -------------------------------------------------------------
     P("materials", "order_ranges", [[0, 1, "bark_mature"], [2, 12, "bark_young"]], "list",
       doc="[min_order, max_order, material] triples"),
