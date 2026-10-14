@@ -11,22 +11,23 @@ max_age = 200
 model = "buds"
 
 [buds]
-# calibrated by scripts/bud_calibrate.py (best of 140 samples against open-grown oak targets)
+# calibrated by scripts/bud_calibrate.py over 20, 80 and 200 years (rank 3 of 140; chosen by eye:
+# a broad dome on a clean bole at 200 years)
 light_model = "shadow"      # the paper's shadow propagation
-shadow_a = 0.0822
+shadow_a = 0.0418
 shadow_b = 2.0
-shadow_depth = 4
-shadow_cell = 0.243
+shadow_depth = 8
+shadow_cell = 0.3351
 shoot_length = 0.1          # m of internode per unit of resource
-resource_per_light = 3.2263
-apical_control = 0.5317
-apical_control_old = 0.4865
-shed_threshold = 0.2432
+resource_per_light = 2.8223
+apical_control = 0.5389
+apical_control_old = 0.5
+shed_threshold = 0.2417
 max_height = 45.0           # m; hydraulic limit
 lateral_buds = 0            # acrotony off
-branching_angle = 32.9214
+branching_angle = 38.3156
 phyllotaxis = 137.5
-light_weight = 0.3126
+light_weight = 0.2243
 tropism = 0.1               # eta, positive = up
 
 [architecture]

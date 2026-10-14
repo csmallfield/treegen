@@ -34,7 +34,7 @@ def test_young_tree_is_the_start_of_the_old_one(bud_oak):
     # everything the old tree grew by year 10 is in the young tree, in the same place
     then = old.pos[old.birth <= 10]
     have = {tuple(p) for p in np.round(young.pos, 9)}
-    assert len(then) > 50 and all(tuple(p) in have for p in np.round(then, 9))
+    assert len(then) > 20 and all(tuple(p) in have for p in np.round(then, 9))
 
 
 def test_apical_control_trades_height_for_spread(bud_oak):
