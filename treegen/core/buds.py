@@ -72,6 +72,8 @@ class _Grow:
                 a[: self.n] = getattr(self, k)[: self.n]
                 setattr(self, k, a)
         s = slice(self.n, need)
+        for k, (dt, shape, fill) in self._fields.items():   # rows may be reused after keep()
+            getattr(self, k)[s] = fill
         self.n = need
         return s
 
@@ -253,6 +255,57 @@ def _shed(nodes, N, levels, Q, threshold, year, max_ring=np.inf):
     return mark
 
 
+_ARCHIVED = ("uid", "pos", "birth", "depth", "state", "shed_year", "shed_tips", "ring")
+KEEP_SHED_YEARS = 10         # shed wood that lived this long is kept for the shed overlay and age scrub
+
+
+def _archive_shed(nodes, buds, archive):
+    """Move shed wood out of the working arrays; it is only needed again at the end.
+
+    Every season walks the working arrays several times, and shed wood soon
+    outnumbers live wood many times over (2.5 million to 0.3 million by 120 years).
+    A shed branch takes its whole subtree, so no live node or bud refers to it.
+    Only wood that lived KEEP_SHED_YEARS is kept in the output: half of all shed
+    wood is twig turnover of two years or less, its rings are already counted in
+    the wood below, and keeping it made a 200-year tree a 580 MB cache file. A
+    branch's base is never younger than what it carried, so what is kept stays a
+    connected tree.
+    """
+    N, M = nodes.n, buds.n
+    gone = nodes.state[:N] == SHED
+    if not gone.any():
+        return
+    par = nodes.parent[:N]
+    puid = np.where(par >= 0, nodes.uid[np.maximum(par, 0)], -1)
+    lived = gone & (nodes.shed_year[:N] - nodes.birth[:N] >= KEEP_SHED_YEARS)
+    if lived.any():
+        rec = {k: getattr(nodes, k)[:N][lived].copy() for k in _ARCHIVED}
+        rec["parent_uid"] = puid[lived]
+        archive.append(rec)
+    remap = np.full(N, -1, np.int64)
+    remap[~gone] = np.arange(int((~gone).sum()))
+    nodes.keep(~gone)
+    n = nodes.n
+    nodes.parent[:n] = np.where(nodes.parent[:n] >= 0, remap[np.maximum(nodes.parent[:n], 0)], -1)
+    buds.node[:M] = remap[buds.node[:M]]
+
+
+def _assemble(nodes, archive):
+    """Live and archived nodes as one tree, in creation order (parents before children)."""
+    n = nodes.n
+    par = nodes.parent[:n]
+    live = {k: getattr(nodes, k)[:n] for k in _ARCHIVED}
+    live["parent_uid"] = np.where(par >= 0, nodes.uid[np.maximum(par, 0)], -1)
+    parts = [live] + archive
+    cat = {k: np.concatenate([p[k] for p in parts]) for k in live}
+    order = np.argsort(cat["uid"], kind="stable")
+    cat = {k: v[order] for k, v in cat.items()}
+    index = np.full(int(cat["uid"].max()) + 1, -1, np.int64)
+    index[cat["uid"]] = np.arange(len(order))
+    cat["parent"] = np.where(cat["parent_uid"] >= 0, index[np.maximum(cat["parent_uid"], 0)], -1)
+    return cat
+
+
 def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) -> GrowthResult:
     B = params["buds"]
     alpha = B["resource_per_light"]
@@ -274,7 +327,10 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         "phi": (np.float64, (), 0.0),                               # phyllotactic azimuth along the axis
         "state": (np.int8, (), ALIVE), "shed_year": (np.float32, (), -1.0), "shed_tips": (np.float32, (), 0.0),
         "ring": (np.float64, (), 0.0),                              # wood cross-section, tip-years
+        "uid": (np.int64, (), 0),                                   # creation order, never changes
     })
+    archive: list = []                                              # shed wood, see _archive_shed
+    next_uid = 1
     buds = _Grow({
         "node": (np.int64, (), 0), "dir": (np.float64, (3,), 0.0), "terminal": (bool, (), False),
         "birth": (np.float32, (), 0.0),
@@ -385,6 +441,9 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
             d = normalize(cur_dir[act] + xi * light[act] + eta * UP)
             s = nodes.reserve(len(act))
             ids = np.arange(s.start, s.stop)
+            uids = np.arange(next_uid, next_uid + len(act))
+            next_uid += len(act)
+            nodes.uid[s] = uids
             p = cur[act]
             nodes.pos[s] = nodes.pos[p] + d * length[act, None]
             nodes.parent[s] = p
@@ -393,7 +452,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
             starts_axis = lateral_start[act] & (k == 0)
             nodes.main[s] = ~starts_axis
             # phyllotaxis runs along an axis; a new axis starts at its own (seeded) azimuth
-            nodes.phi[s] = np.where(starts_axis, 2 * math.pi * hash01(ids, seed, 23), nodes.phi[p] + phyllo)
+            nodes.phi[s] = np.where(starts_axis, 2 * math.pi * hash01(uids, seed, 23), nodes.phi[p] + phyllo)
             # one lateral bud per new node, or (acrotony) only on the shoot's last nodes
             budded = np.ones(len(act), bool) if acro == 0 else (count_g[act] - k <= acro)
             if budded.any():
@@ -406,20 +465,24 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         # the bud that grew now sits at the end of its shoot as that axis's terminal bud
         buds.node[go], buds.dir[go], buds.terminal[go] = cur, cur_dir, True
 
+        _archive_shed(nodes, buds, archive)
         if progress:
             progress(year / max(seasons, 1), f"year {year}: {nodes.n} nodes, {buds.n} buds")
 
-    N = nodes.n
-    pos = nodes.pos[:N].copy()
+    live_bud_pos = nodes.pos[buds.node[: buds.n]].copy()
+    term_bud_nodes = nodes.uid[buds.node[: buds.n][buds.terminal[: buds.n]]]
+    tree = _assemble(nodes, archive)
+    N = len(tree["uid"])
+    pos = tree["pos"]
     if not lit or seasons == 0:
         expo, ldir = np.ones(N, np.float32), np.tile(np.array([0, 1, 0], np.float32), (N, 1))
     else:
-        leafy = nodes.birth[:N] >= seasons - 1
-        leafy[buds.node[: buds.n][buds.terminal[: buds.n]]] = True
-        leafy &= nodes.state[:N] == ALIVE
+        leafy = tree["birth"] >= seasons - 1
+        leafy[np.isin(tree["uid"], term_bud_nodes)] = True
+        leafy &= tree["state"] == ALIVE
         hs = age_state(params, float(age)).height_mult
         if model == "shadow":                     # shadow from the live buds, read at every node
-            sh = _Shadow(pos[buds.node[: buds.n]], B["shadow_cell"], B["shadow_a"], B["shadow_b"],
+            sh = _Shadow(live_bud_pos, B["shadow_cell"], B["shadow_a"], B["shadow_b"],
                          int(B["shadow_depth"]))
             expo, ldir = sh.sample(pos)
             stats["grid"] = list(sh.shape)
@@ -427,10 +490,9 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
             field_ = _field(params, scene, pos, leafy, hs, max(MIN_CELL, shoot * 1.5))
             expo, ldir = _sample_by_cell(field_, pos)
             stats["grid"] = list(field_.density.shape)
-    stats.update(nodes=N, alive=int((nodes.state[:N] == ALIVE).sum()), buds=int(buds.n))
+    stats.update(nodes=N, alive=int((tree["state"] == ALIVE).sum()), buds=int(buds.n))
     return GrowthResult(
-        pos=pos, parent=nodes.parent[:N].copy(), birth=nodes.birth[:N].copy(),
-        state=nodes.state[:N].copy(), depth=nodes.depth[:N].copy(),
-        shed_year=nodes.shed_year[:N].copy(), shed_tips=nodes.shed_tips[:N].copy(),
+        pos=pos, parent=tree["parent"], birth=tree["birth"], state=tree["state"], depth=tree["depth"],
+        shed_year=tree["shed_year"], shed_tips=tree["shed_tips"],
         exposure=expo, light_dir=ldir, attractors=np.zeros((0, 3)), attractor_state=np.zeros(0, np.int8),
-        age=float(age), stats=stats, ring_area=nodes.ring[:N].copy())
+        age=float(age), stats=stats, ring_area=tree["ring"])

@@ -29,9 +29,12 @@ def test_deterministic_and_seeded(bud_oak):
 
 def test_young_tree_is_the_start_of_the_old_one(bud_oak):
     young, old = grow_buds(bud_oak, Scene(), 3, 10), grow_buds(bud_oak, Scene(), 3, 16)
-    n = len(young.pos)
-    assert n < len(old.pos)
-    assert np.allclose(young.pos, old.pos[:n]) and np.array_equal(young.parent, old.parent[:n])
+    assert len(young.pos) < len(old.pos)
+    # short-lived shed twigs are dropped from the output, so compare wood rather than arrays:
+    # everything the old tree grew by year 10 is in the young tree, in the same place
+    then = old.pos[old.birth <= 10]
+    have = {tuple(p) for p in np.round(young.pos, 9)}
+    assert len(then) > 50 and all(tuple(p) in have for p in np.round(then, 9))
 
 
 def test_apical_control_trades_height_for_spread(bud_oak):
@@ -53,12 +56,13 @@ def test_shedding_removes_wood_and_keeps_the_tree_valid(bud_oak):
     off = {**bud_oak, "buds": {**bud_oak["buds"], "shed_threshold": 0.0}}
     p = {**bud_oak, "buds": {**bud_oak["buds"], "shed_threshold": 0.4}}
     kept, shed = grow_buds(off, Scene(), 3, 25), grow_buds(p, Scene(), 3, 25)
-    assert (kept.state == SHED).sum() == 0 and (shed.state == SHED).sum() > 0
+    # (shed wood that lived under KEEP_SHED_YEARS is counted but not kept in the output)
+    assert kept.stats["shed_nodes"] == 0 and shed.stats["shed_nodes"] > 0
     assert shed.shed_tips.sum() > 0                                 # the wood below remembers them
-    assert np.all(shed.shed_year[shed.state == SHED] > 0)
+    assert np.all(shed.shed_year[shed.state == SHED] - shed.birth[shed.state == SHED] >= 10)
     sk = assemble_skeleton(shed, p, 3)                              # shed wood is gone from the skeleton
     # (extraction also drops branch orders above max_order, hence <=)
-    assert len(np.unique(sk.node)) <= (shed.state != SHED).sum() < len(shed.pos)
+    assert len(np.unique(sk.node)) <= (shed.state != SHED).sum()
     assert shed.state[0] != SHED                                    # never the main stem
 
 
