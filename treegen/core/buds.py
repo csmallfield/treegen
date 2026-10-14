@@ -117,6 +117,88 @@ def _field(params, scene, pos, leafy, hscale, cell):
                             L["ray_count"], L["sky_bias"], hscale)
 
 
+class _Shadow:
+    """The paper's shadow propagation (Palubicki et al. 2009, section 4.1).
+
+    Space is a grid of cells. A bud in cell (I, J, K) adds a * b**-q of shadow to the
+    cells (I +- p, J - q, K +- p) for q = 0..q_max and p = 0..q: a square pyramid of
+    penumbra below it. A bud's exposure is max(C - s + a, 0) with C = 1, the + a
+    cancelling its own shadow, and its best direction of growth is down the shadow
+    gradient. The pyramids are summed layer by layer with box sums, so the cost is
+    proportional to the grid, not to buds times pyramid size.
+    """
+
+    def __init__(self, bud_pos, cell, a, b, q_max):
+        self.cell, self.a = cell, a
+        lo = bud_pos.min(0) - (q_max + 2) * cell
+        hi = bud_pos.max(0) + (q_max + 2) * cell
+        lo[1] = min(lo[1], 0.0)
+        self.origin = lo
+        shape = np.maximum(np.ceil((hi - lo) / cell).astype(int), 1)
+        idx = self._index(bud_pos, shape)
+        count = np.zeros(shape, np.float64)
+        np.add.at(count, (idx[:, 0], idx[:, 1], idx[:, 2]), 1.0)
+        # integral image over x and z of every layer, for (2q+1)^2 box sums
+        integ = np.zeros((shape[0] + 1, shape[1], shape[2] + 1))
+        integ[1:, :, 1:] = count.cumsum(0).cumsum(2)
+        s = np.zeros(shape, np.float64)
+        nx, ny, nz = shape
+        for q in range(q_max + 1):
+            i0 = np.clip(np.arange(nx) - q, 0, nx)
+            i1 = np.clip(np.arange(nx) + q + 1, 0, nx)
+            k0 = np.clip(np.arange(nz) - q, 0, nz)
+            k1 = np.clip(np.arange(nz) + q + 1, 0, nz)
+            box = (integ[i1][:, :, k1] - integ[i0][:, :, k1] - integ[i1][:, :, k0] + integ[i0][:, :, k0])
+            if q == 0:
+                s += a * box
+            elif q < ny:
+                s[:, : ny - q, :] += a * b ** (-q) * box[:, q:, :]   # cast onto the layer q below
+        self.s, self.shape = s, shape
+
+    def _index(self, pts, shape=None):
+        shape = self.shape if shape is None else shape
+        i = np.floor((pts - self.origin) / self.cell).astype(np.int64)
+        return np.clip(i, 0, np.asarray(shape) - 1)
+
+    def sample(self, pts):
+        """(exposure, direction) at pts: max(1 - s + a, 0) and the downhill shadow gradient."""
+        i = self._index(pts)
+        s = self.s
+        q = np.clip(1.0 - s[i[:, 0], i[:, 1], i[:, 2]] + self.a, 0.0, 1.0)
+        g = np.zeros((len(pts), 3))
+        for ax in range(3):
+            up, dn = i.copy(), i.copy()
+            up[:, ax] = np.minimum(up[:, ax] + 1, self.shape[ax] - 1)
+            dn[:, ax] = np.maximum(dn[:, ax] - 1, 0)
+            g[:, ax] = s[up[:, 0], up[:, 1], up[:, 2]] - s[dn[:, 0], dn[:, 1], dn[:, 2]]
+        v = -g
+        n = np.linalg.norm(v, axis=1)
+        v = np.where(n[:, None] > 1e-9, v / np.maximum(n, 1e-9)[:, None], UP)
+        return q, v
+
+
+def _light(params, scene, pos, leafy, bud_nodes, hscale, model):
+    """(exposure, direction) at the nodes bud_nodes: the paper's shadows, or the occlusion field.
+
+    With shadow propagation, neighbour proxies still shade through the occlusion field
+    (proxies only, no foliage), multiplied in, so stands keep working.
+    """
+    B = params["buds"]
+    pts = pos[bud_nodes]
+    if model == "shadow":
+        sh = _Shadow(pts, B["shadow_cell"], B["shadow_a"], B["shadow_b"], int(B["shadow_depth"]))
+        q, v = sh.sample(pts)
+        if scene.neighbours:
+            nb = _field(params, scene, pos, np.zeros(len(pos), bool), hscale, max(MIN_CELL, B["shoot_length"] * 1.5))
+            qn, vn = _sample_by_cell(nb, pts)
+            q = q * qn
+            v = normalize(v + vn * (1.0 - qn)[:, None])
+        return q, v, sh.shape
+    field_ = _field(params, scene, pos, leafy, hscale, max(MIN_CELL, B["shoot_length"] * 1.5))
+    q, v = _sample_by_cell(field_, pts)
+    return q, v, field_.density.shape
+
+
 def _sample_by_cell(field_, pts):
     """Exposure and light direction at pts, sampled once per occupied grid cell.
 
@@ -202,7 +284,8 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     s = buds.reserve(1)
     buds.dir[s], buds.terminal[s], buds.birth[s] = UP, True, -1.0
     stats = {"seasons": seasons, "shoots": 0, "shed_nodes": 0, "grid": [0, 0, 0]}
-    field_ = None
+    model = B["light_model"]
+    lit = False
 
     for year in range(1, seasons + 1):
         N, M = nodes.n, buds.n
@@ -217,9 +300,9 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         leafy[nodes.birth[:N] >= year - 1] = True
         leafy[bnode[buds.terminal[:M]]] = True
         leafy &= live
-        field_ = _field(params, scene, pos, leafy, hscale, max(MIN_CELL, shoot * 1.5))
         with_bud = np.unique(bnode)
-        q_s, v_s = _sample_by_cell(field_, pos[with_bud])
+        q_s, v_s, grid = _light(params, scene, pos, leafy, with_bud, hscale, model)
+        lit = True
         q_node = np.zeros(N)
         q_node[with_bud] = q_s
         vdir = np.tile(UP, (N, 1))
@@ -328,16 +411,22 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
 
     N = nodes.n
     pos = nodes.pos[:N].copy()
-    if field_ is None or seasons == 0:
+    if not lit or seasons == 0:
         expo, ldir = np.ones(N, np.float32), np.tile(np.array([0, 1, 0], np.float32), (N, 1))
     else:
         leafy = nodes.birth[:N] >= seasons - 1
         leafy[buds.node[: buds.n][buds.terminal[: buds.n]]] = True
         leafy &= nodes.state[:N] == ALIVE
-        field_ = _field(params, scene, pos, leafy, age_state(params, float(age)).height_mult,
-                        max(MIN_CELL, shoot * 1.5))
-        expo, ldir = _sample_by_cell(field_, pos)
-        stats["grid"] = list(field_.density.shape)
+        hs = age_state(params, float(age)).height_mult
+        if model == "shadow":                     # shadow from the live buds, read at every node
+            sh = _Shadow(pos[buds.node[: buds.n]], B["shadow_cell"], B["shadow_a"], B["shadow_b"],
+                         int(B["shadow_depth"]))
+            expo, ldir = sh.sample(pos)
+            stats["grid"] = list(sh.shape)
+        else:
+            field_ = _field(params, scene, pos, leafy, hs, max(MIN_CELL, shoot * 1.5))
+            expo, ldir = _sample_by_cell(field_, pos)
+            stats["grid"] = list(field_.density.shape)
     stats.update(nodes=N, alive=int((nodes.state[:N] == ALIVE).sum()), buds=int(buds.n))
     return GrowthResult(
         pos=pos, parent=nodes.parent[:N].copy(), birth=nodes.birth[:N].copy(),

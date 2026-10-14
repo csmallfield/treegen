@@ -83,6 +83,13 @@ SCHEMA: list[Param] = [
       doc="Extra vertical bias on the leader only (conifers)"),
     # buds (growth.model = "buds") --------------------------------------------
     P("buds", "shoot_length", 0.3, lo=0.02, hi=2, unit="m", doc="Internode length per unit of resource"),
+    P("buds", "light_model", "field", "str", choices=("field", "shadow"),
+      doc="How buds sense light: 'shadow' is the paper's shadow propagation (each bud casts a pyramid "
+          "of shadow below it); 'field' is treegen's smooth occlusion field"),
+    P("buds", "shadow_cell", 0.25, lo=0.05, hi=2, unit="m", doc="Shadow grid cell size (the paper: about one internode)"),
+    P("buds", "shadow_a", 0.2, lo=0.001, hi=5, doc="a: shadow a bud casts on its own cell; b**-q of it q layers down"),
+    P("buds", "shadow_b", 2.0, lo=1.01, hi=10, doc="b: how fast a bud's shadow fades with depth below it"),
+    P("buds", "shadow_depth", 6, "int", lo=1, hi=20, doc="q_max: layers a bud's shadow reaches below it (the paper: 4-8)"),
     P("buds", "resource_per_light", 2.0, lo=0.1, hi=20,
       doc="alpha: growth resource the tree gets per unit of light its buds gather"),
     P("buds", "apical_control", 0.5, lo=0, hi=1,

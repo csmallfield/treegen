@@ -1,0 +1,117 @@
+"""Random search over bud-model parameters, scored against open-grown oak targets.
+
+    python scripts/bud_calibrate.py --samples 120 --out out/buds/calib.json
+
+Each sample grows the oak at 20 and 80 years (open field) and scores it on log
+errors against the targets below, so a factor of two either way costs the same.
+The point is less to find one best tree than to see whether any region of the
+parameter space meets all targets at once, and which parameters matter.
+"""
+from __future__ import annotations
+
+import argparse
+import json
+import math
+import random
+import sys
+import time
+from concurrent.futures import ProcessPoolExecutor
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[1]
+
+# name: (low, high, log-scale)
+SPACE = {
+    "buds.shadow_a": (0.02, 0.15, True),
+    "buds.shed_threshold": (0.12, 0.35, False),
+    "buds.apical_control": (0.46, 0.54, False),
+    "buds.apical_control_old": (0.42, 0.50, False),
+    "buds.resource_per_light": (2.5, 6.0, True),
+    "buds.shadow_depth": (3, 8, False),
+    "buds.shadow_cell": (0.18, 0.35, False),
+    "buds.light_weight": (0.0, 0.6, False),
+    "buds.branching_angle": (30.0, 60.0, False),
+}
+INTS = {"buds.shadow_depth"}
+
+# age: {metric: target}; first fork and fork gap are offset so zero is not infinitely bad
+TARGETS = {
+    20.0: {"dbh": 0.16, "height": 8.0, "crown_width": 7.0},
+    80.0: {"dbh": 0.64, "height": 22.0, "crown_width": 22.0, "first_fork": 3.0, "fork_gap_inner": 2.0},
+}
+MAX_LIVE = 150_000
+
+
+def _sample(rng):
+    out = {"buds.light_model": "shadow"}
+    for k, (lo, hi, log) in SPACE.items():
+        v = math.exp(rng.uniform(math.log(lo), math.log(hi))) if log else rng.uniform(lo, hi)
+        out[k] = int(round(v)) if k in INTS else round(v, 4)
+    return out
+
+
+def _score(job):
+    sets, species = job
+    sys.path.insert(0, str(ROOT))
+    from treegen.core.buds import grow_buds
+    from treegen.metrics import tree_metrics
+    from treegen.pipeline import assemble_skeleton
+    from treegen.schema import Scene, load_species, validate
+
+    p = load_species(species)
+    for key, value in sets.items():
+        g, n = key.split(".", 1)
+        p[g][n] = value
+    p = validate(p, "calibrate")
+    t = time.perf_counter()
+    err, detail = 0.0, {}
+    for age, targets in TARGETS.items():
+        try:
+            g = grow_buds(p, Scene(), 42, age)
+        except RuntimeError:
+            return sets, 99.0, {"failed": f"too many nodes by {age:g} y"}, time.perf_counter() - t
+        if g.stats["alive"] < 50 or g.stats["alive"] > MAX_LIVE:
+            return sets, 50.0, {"failed": f"{g.stats['alive']} live nodes at {age:g} y"}, time.perf_counter() - t
+        m = tree_metrics(assemble_skeleton(g, p, 42))
+        for key, target in targets.items():
+            v = m[key]
+            if key in ("first_fork", "fork_gap_inner"):
+                e = math.log((v + 0.5) / (target + 0.5))
+            else:
+                e = math.log(max(v, 1e-3) / target)
+            err += e * e
+            detail[f"{key}@{age:g}"] = round(v, 2)
+        detail[f"live@{age:g}"] = g.stats["alive"]
+    return sets, err, detail, time.perf_counter() - t
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    ap.add_argument("--species", default=str(ROOT / "species" / "quercus_buds.toml"))
+    ap.add_argument("--samples", type=int, default=120)
+    ap.add_argument("--seed", type=int, default=1)
+    ap.add_argument("--workers", type=int, default=7)
+    ap.add_argument("--out", default=str(ROOT / "out" / "buds" / "calib.json"))
+    args = ap.parse_args(argv)
+    rng = random.Random(args.seed)
+    jobs = [(_sample(rng), args.species) for _ in range(args.samples)]
+    results = []
+    with ProcessPoolExecutor(max_workers=args.workers) as pool:
+        for i, (sets, err, detail, dt) in enumerate(pool.map(_score, jobs), 1):
+            results.append({"error": round(err, 3), "params": sets, "metrics": detail, "seconds": round(dt, 1)})
+            if i % 20 == 0:
+                print(f"{i}/{len(jobs)} done", flush=True)
+    results.sort(key=lambda r: r["error"])
+    Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+    Path(args.out).write_text(json.dumps(results, indent=1))
+    print(f"\nbest of {len(results)} (error = sum of squared log errors; 0 = every target met)")
+    for r in results[:8]:
+        print(f"  error {r['error']:6.2f}  {r['metrics']}")
+        print("      " + "  ".join(f"{k.split('.')[1]}={v}" for k, v in r["params"].items() if k != "buds.light_model"))
+    ok = sum(1 for r in results if r["error"] < 50)
+    print(f"\n{ok} of {len(results)} samples grew a tree at all (the rest stalled or ran away)")
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -84,3 +84,17 @@ def test_hydraulic_limit_slows_height(bud_oak):
     h_free = grow_buds(free, Scene(), 3, 30).pos[:, 1].max()
     h_cap = grow_buds(capped, Scene(), 3, 30).pos[:, 1].max()
     assert h_cap < h_free and h_cap < 9.0
+
+
+def test_shadow_propagation_darkens_the_inside_of_a_crown(bud_oak):
+    from treegen.core.buds import _Shadow
+    # a dense block of buds: the cells below its middle get far less light than its top
+    xs = np.linspace(-1, 1, 9)
+    block = np.array([[x, y, z] for x in xs for z in xs for y in (2.0, 2.25, 2.5)])
+    sh = _Shadow(block, 0.25, 0.1, 2.0, 6)
+    q, v = sh.sample(np.array([[0.0, 2.5, 0.0], [0.0, 1.5, 0.0], [5.0, 2.0, 5.0]]))
+    assert q[0] > q[1] and q[2] == pytest.approx(1.0)                # lit top, shaded below, open space
+    assert v[1, 1] < 0 or abs(v[1, 1]) < 1.0                          # a direction, not NaN
+    p = {**bud_oak, "buds": {**bud_oak["buds"], "light_model": "shadow", "shadow_a": 0.05}}
+    g = grow_buds(p, Scene(), 3, 20)
+    assert g.stats["alive"] > 50 and g.exposure.min() < 0.1 < g.exposure.max()
