@@ -44,6 +44,9 @@ class GrowthResult:
     attractor_state: np.ndarray
     age: float
     stats: dict = field(default_factory=dict)
+    # bud model only: wood cross-section per node in tip-years (Pressler's law); None = use the
+    # plain pipe model on live and shed tips
+    ring_area: np.ndarray | None = None
 
     def to_npz(self, path):
         np.savez_compressed(path, **{k: v for k, v in self.__dict__.items() if isinstance(v, np.ndarray)},

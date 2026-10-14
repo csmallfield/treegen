@@ -12,6 +12,11 @@ WOOD_DENSITY = 750.0  # kg/m^3
 def pipe_radii(ng: NodeGraph, params: dict) -> np.ndarray:
     R = params["radii"]
     n_exp, rt = R["pipe_exponent"], R["tip_radius"]
+    if ng.ring_area is not None:
+        # annual rings (Pressler's law): wood grows with the sum over the years of the tips each
+        # node carried, so a one-season tip has tip_radius and long-lived wood the most. The
+        # pipe exponent applies as for the plain pipe model (2 = area-preserving)
+        return rt * np.power(np.maximum(ng.ring_area, 1.0), 1.0 / n_exp)
     order_csr, starts, ends = ng.children()
     nkids = ends - starts
     tips = (nkids == 0).astype(np.float64)

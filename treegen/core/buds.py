@@ -12,6 +12,11 @@ axis ends in a terminal bud. Each season:
                   shoot_length * v / floor(v); below 1 it stays dormant
     5. direction  each internode = default orientation + xi * V + eta * up
 
+Hydraulic limitation (Ryan and Yoder 1997; Koch et al. 2004): lifting water gets
+harder with height, and leaf productivity falls roughly linearly toward zero at a
+species' maximum height. With max_height > 0 a bud's light counts for
+(1 - height / max_height) of itself, so height growth slows and stops near it.
+
 Acrotony (an architectural trait of the species, like phyllotaxis): with
 lateral_buds = k > 0, only the last k nodes of each season's shoot carry a lateral
 bud, so branching clusters at the end of each year's growth and the rest of the
@@ -168,6 +173,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     shoot, xi, eta = B["shoot_length"], B["light_weight"], B["tropism"]
     angle, phyllo = math.radians(B["branching_angle"]), math.radians(B["phyllotaxis"])
     acro = int(B["lateral_buds"])
+    h_max = B["max_height"]
     seasons = int(math.floor(age))
 
     nodes = _Grow({
@@ -175,6 +181,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         "depth": (np.int32, (), 0), "main": (bool, (), True),      # main: continues its parent's axis
         "phi": (np.float64, (), 0.0),                               # phyllotactic azimuth along the axis
         "state": (np.int8, (), ALIVE), "shed_year": (np.float32, (), -1.0), "shed_tips": (np.float32, (), 0.0),
+        "ring": (np.float64, (), 0.0),                              # wood cross-section, tip-years
     })
     buds = _Grow({
         "node": (np.int64, (), 0), "dir": (np.float64, (3,), 0.0), "terminal": (bool, (), False),
@@ -228,6 +235,26 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
                 np.add.at(Q, bnode, qb)
                 for lvl in reversed(levels[1:]):
                     np.add.at(Q, par[lvl], Q[lvl])
+
+        # ---- annual ring: each node adds wood in proportion to the tips it carries this season --
+        live = nodes.state[:N] == ALIVE
+        kids = np.zeros(N, np.int64)
+        np.add.at(kids, par[1:][live[1:]], 1)
+        carried = (live & (kids == 0)).astype(np.float64)
+        for lvl in reversed(levels[1:]):
+            lvl = lvl[live[lvl]]
+            np.add.at(carried, par[lvl], carried[lvl])
+        nodes.ring[:N] += carried
+
+        # ---- hydraulic limitation: high leaves turn their light into less resource -------------
+        # (shedding above used the light itself; only the resource budget pays for height)
+        if h_max > 0:
+            q_node = q_node * np.clip(1.0 - pos[:, 1] / h_max, 0.0, 1.0)
+            qb = q_node[bnode]
+            Q = np.zeros(N)
+            np.add.at(Q, bnode, qb)
+            for lvl in reversed(levels[1:]):
+                np.add.at(Q, par[lvl], Q[lvl])
 
         # ---- 3. allocate resource, root to tips (extended Borchert-Honda) -----------------------
         w_node = np.where(nodes.main[:N], lam, 1.0 - lam)
@@ -307,4 +334,4 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         state=nodes.state[:N].copy(), depth=nodes.depth[:N].copy(),
         shed_year=nodes.shed_year[:N].copy(), shed_tips=nodes.shed_tips[:N].copy(),
         exposure=expo, light_dir=ldir, attractors=np.zeros((0, 3)), attractor_state=np.zeros(0, np.int8),
-        age=float(age), stats=stats)
+        age=float(age), stats=stats, ring_area=nodes.ring[:N].copy())

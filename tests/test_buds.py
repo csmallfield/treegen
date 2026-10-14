@@ -50,8 +50,9 @@ def test_pipeline_dispatches_on_growth_model(bud_oak):
 
 def test_shedding_removes_wood_and_keeps_the_tree_valid(bud_oak):
     from treegen.core.growth import SHED
+    off = {**bud_oak, "buds": {**bud_oak["buds"], "shed_threshold": 0.0}}
     p = {**bud_oak, "buds": {**bud_oak["buds"], "shed_threshold": 0.4}}
-    kept, shed = grow_buds(bud_oak, Scene(), 3, 25), grow_buds(p, Scene(), 3, 25)
+    kept, shed = grow_buds(off, Scene(), 3, 25), grow_buds(p, Scene(), 3, 25)
     assert (kept.state == SHED).sum() == 0 and (shed.state == SHED).sum() > 0
     assert shed.shed_tips.sum() > 0                                 # the wood below remembers them
     assert np.all(shed.shed_year[shed.state == SHED] > 0)
@@ -67,3 +68,19 @@ def test_apical_control_changes_over_the_trees_life(bud_oak):
              "meta": {**bud_oak["meta"], "max_age": 30}}
         return grow_buds(p, Scene(), 3, 30).pos[:, 1].max()
     assert height(0.56) > height(0.44)                              # leaders favoured late: taller
+
+
+
+def test_annual_rings_thicken_long_lived_wood_most(bud_oak):
+    g = grow_buds(bud_oak, Scene(), 3, 25)
+    assert g.ring_area is not None and g.ring_area[0] == g.ring_area.max()   # the root carried the most
+    sk = assemble_skeleton(g, bud_oak, 3)
+    assert sk.radius[0] > 10 * sk.radius[sk.offsets[1:] - 1].min()            # trunk base far above a twig
+
+
+def test_hydraulic_limit_slows_height(bud_oak):
+    free = {**bud_oak, "buds": {**bud_oak["buds"], "max_height": 0.0}}
+    capped = {**bud_oak, "buds": {**bud_oak["buds"], "max_height": 8.0}}
+    h_free = grow_buds(free, Scene(), 3, 30).pos[:, 1].max()
+    h_cap = grow_buds(capped, Scene(), 3, 30).pos[:, 1].max()
+    assert h_cap < h_free and h_cap < 9.0

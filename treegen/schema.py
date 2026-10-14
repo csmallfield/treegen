@@ -96,6 +96,9 @@ SCHEMA: list[Param] = [
     P("buds", "leaf_area", 0.2, lo=0, hi=5, unit="m2",
       doc="Leaf area on each leaf-bearing node (last season's shoots and axis ends); sets how much "
           "the tree shades itself"),
+    P("buds", "max_height", 0.0, lo=0, hi=150, unit="m",
+      doc="Hydraulic limitation: a bud's light is worth (1 - height / max_height), so height growth "
+          "slows and stops near the species' maximum. 0 = no limit"),
     P("buds", "lateral_buds", 0, "int", lo=0, hi=20,
       doc="Acrotony: only the last this-many nodes of each season's shoot carry a lateral bud, so "
           "branching clusters at the end of each year's growth (strong in oak). 0 = a bud on every node"),

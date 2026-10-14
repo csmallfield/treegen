@@ -26,6 +26,7 @@ class NodeGraph:
     exposure: np.ndarray
     light_dir: np.ndarray
     src_index: np.ndarray      # index into the GrowthResult arrays
+    ring_area: np.ndarray | None = None   # see GrowthResult.ring_area
 
     @property
     def n(self):
@@ -62,7 +63,8 @@ def build_graph(g: GrowthResult) -> NodeGraph:
     return NodeGraph(
         pos=g.pos[keep].copy(), parent=np.where(par >= 0, remap[np.maximum(par, 0)], -1),
         birth=g.birth[keep], dead=g.state[keep] == 1, depth=g.depth[keep], shed_tips=g.shed_tips[keep],
-        exposure=g.exposure[keep], light_dir=g.light_dir[keep], src_index=keep)
+        exposure=g.exposure[keep], light_dir=g.light_dir[keep], src_index=keep,
+        ring_area=None if g.ring_area is None else g.ring_area[keep])
 
 
 @dataclass

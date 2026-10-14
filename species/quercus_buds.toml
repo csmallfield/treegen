@@ -1,7 +1,7 @@
 # Pedunculate oak grown with the bud-based model (docs/BUD_BACKEND_DESIGN.md).
-# Experimental and uncalibrated: milestone B1, no shedding yet.
-# The bud model reads [buds], [light] (rays and sky only), [radii], [refinement],
-# [geometry], [materials] and the age curves below. It has no envelope.
+# Experimental: being calibrated against open-grown oak targets (scripts/bud_eval.py).
+# The bud model reads the buds, light (rays and sky only), radii, refinement,
+# geometry and materials groups and the age curves below. It has no envelope.
 [meta]
 name = "quercus_robur_buds"
 reference_age = 80
@@ -11,10 +11,14 @@ max_age = 200
 model = "buds"
 
 [buds]
-shoot_length = 0.3          # m of internode per unit of resource
-resource_per_light = 1.3    # alpha; 1.1 stalls as a seedling, 1.5 gives 84k nodes at 80 y
-apical_control = 0.5        # lambda; 0.46 is a wide dome, 0.54 an 82 m pole
-leaf_area = 0.2             # m2 of leaf per leaf-bearing node
+shoot_length = 0.1          # m of internode per unit of resource
+resource_per_light = 4.0    # alpha
+apical_control = 0.52       # lambda when young: a leader
+apical_control_old = 0.45   # lambda at max_age: a spreading crown
+shed_threshold = 0.15       # light per internode below which a branch goes
+leaf_area = 0.15            # m2 of leaf per leaf-bearing node
+lateral_buds = 0            # acrotony off
+max_height = 45.0           # m; hydraulic limit (Q. robur rarely exceeds 40 m)
 branching_angle = 45
 phyllotaxis = 137.5
 light_weight = 0.2          # xi
@@ -25,8 +29,8 @@ max_order = 4
 min_radius_for_mesh = 0.04
 
 [radii]
-pipe_exponent = 2.3
-tip_radius = 0.01
+pipe_exponent = 2.8         # fitted with tip_radius to open-grown DBH at 20, 80 and 200 y
+tip_radius = 0.0045         # m; a 9 mm current-year shoot
 trunk_flare = { amount = 0.4, height = 0.08 }
 junction_swell = 1.15
 
@@ -39,10 +43,11 @@ noise = { amplitude = 0.08, frequency = 2.0 }
 [geometry]
 mesh_orders = [0, 1, 2, 3, 4]
 radial_segments = { min = 6, max = 24 }
+cluster_twigs = 0
 
 [materials]
 order_ranges = [[0,1,"bark_mature"], [2,4,"bark_young"]]
 
 [age_response]
 height = [[0,0.1],[0.3,0.7],[1,1.0]]
-trunk_radius = [[0,0.05],[1,1.0]]
+trunk_radius = [[0,1.0],[1,1.0]]   # flat: annual rings already thicken the trunk with age
