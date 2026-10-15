@@ -12,10 +12,15 @@ axis ends in a terminal bud. Each season:
                   shoot_length * v / floor(v); below 1 it stays dormant
     5. direction  each internode = default orientation + xi * V + eta * up
 
-Hydraulic limitation (Ryan and Yoder 1997; Koch et al. 2004): lifting water gets
-harder with height, and leaf productivity falls roughly linearly toward zero at a
-species' maximum height. With max_height > 0 a bud's light counts for
-(1 - height / max_height) of itself, so height growth slows and stops near it.
+Hydraulic limitation (Ryan and Yoder 1997; Koch et al. 2004): supplying water to a
+leaf gets harder with its height (gravity) and with the length of wood the water
+travels from the roots (friction), and leaf productivity falls roughly linearly
+toward zero at the limit. A bud's light counts for
+(1 - height / max_height) of itself, so height growth slows and stops near it; and
+the whole tree's resource is scaled by the light-weighted mean of
+(1 - path / max_path) over its buds, so a large tree grows more slowly overall.
+Distance scales the budget rather than each bud's share because sharing by it
+moved growth to the base of the tree. Either limit 0 = off.
 
 Acrotony (an architectural trait of the species, like phyllotaxis): with
 lateral_buds = k > 0, only the last k nodes of each season's shoot carry a lateral
@@ -314,7 +319,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     shoot, xi, eta = B["shoot_length"], B["light_weight"], B["tropism"]
     angle, phyllo = math.radians(B["branching_angle"]), math.radians(B["phyllotaxis"])
     acro = int(B["lateral_buds"])
-    h_max = B["max_height"]
+    h_max, p_max = B["max_height"], B["max_path"]
     max_ring = np.inf                         # the shed diameter limit, in ring units (tip-years)
     if B["shed_max_diameter"] > 0:
         R_ = params["radii"]
@@ -328,6 +333,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         "state": (np.int8, (), ALIVE), "shed_year": (np.float32, (), -1.0), "shed_tips": (np.float32, (), 0.0),
         "ring": (np.float64, (), 0.0),                              # wood cross-section, tip-years
         "uid": (np.int64, (), 0),                                   # creation order, never changes
+        "path": (np.float64, (), 0.0),                              # m of wood from the root
     })
     archive: list = []                                              # shed wood, see _archive_shed
     next_uid = 1
@@ -397,6 +403,12 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
 
         # ---- hydraulic limitation: high leaves turn their light into less resource -------------
         # (shedding above used the light itself; only the resource budget pays for height)
+        budget = 1.0
+        if p_max > 0:
+            # distance cuts the whole tree's budget (a large tree grows more slowly) but is
+            # not used to share it out: sharing by it shifted growth to the base of the tree
+            f_path = np.clip(1.0 - nodes.path[:N][bnode] / p_max, 0.0, 1.0)
+            budget = float((qb * f_path).sum() / max(qb.sum(), 1e-12))
         if h_max > 0:
             q_node = q_node * np.clip(1.0 - pos[:, 1] / h_max, 0.0, 1.0)
             qb = q_node[bnode]
@@ -413,7 +425,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         np.add.at(denom, bnode, w_bud * qb)
         denom = np.maximum(denom, 1e-12)
         v = np.zeros(N)
-        v[0] = alpha * Q[0]
+        v[0] = alpha * Q[0] * budget
         for lvl in levels[1:]:
             p = par[lvl]
             v[lvl] = v[p] * w_node[lvl] * Q[lvl] / denom[p]
@@ -446,6 +458,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
             nodes.uid[s] = uids
             p = cur[act]
             nodes.pos[s] = nodes.pos[p] + d * length[act, None]
+            nodes.path[s] = nodes.path[p] + length[act]
             nodes.parent[s] = p
             nodes.birth[s] = year
             nodes.depth[s] = nodes.depth[p] + 1

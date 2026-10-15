@@ -34,6 +34,7 @@ SPACE = {
     "buds.shadow_b": (1.6, 2.4, False),
     "buds.tropism": (-0.15, 0.15, False),
     "refinement.gravity_droop": (0.3, 1.2, False),
+    "buds.max_path": (30.0, 90.0, False),
     "buds.shadow_cell": (0.18, 0.35, False),
     "buds.light_weight": (0.0, 0.6, False),
     "buds.branching_angle": (30.0, 60.0, False),
