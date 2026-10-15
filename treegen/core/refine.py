@@ -45,9 +45,15 @@ def _rotate_toward(v, target, angle):
     return out * ln
 
 
-def gravity_droop(ng: NodeGraph, r: np.ndarray, amount: float, iterations: int = 2):
+GREEN_OAK_E = 8.0e9          # Pa, elastic modulus of green oak wood
+G = 9.81
+
+
+def gravity_droop(ng: NodeGraph, r: np.ndarray, amount: float, iterations: int = 2, model: str = "relative"):
     if amount <= 0:
         return
+    if model == "elastic":
+        return _elastic_droop(ng, r, amount, iterations)
     for _ in range(iterations):
         v = _segments(ng)
         seg = np.linalg.norm(v, axis=1)
@@ -66,6 +72,37 @@ def gravity_droop(ng: NodeGraph, r: np.ndarray, amount: float, iterations: int =
         for lvl in ng.levels()[1:]:
             acc[lvl] += acc[ng.parent[lvl]] * 0.9
         acc = np.minimum(acc, 1.2)
+        v2 = _rotate_toward(v, DOWN, acc)
+        v2[0] = 0
+        _rebuild(ng, v2)
+
+
+def _elastic_droop(ng: NodeGraph, r: np.ndarray, amount: float, iterations: int):
+    """Beam bending under the wood's own weight, in absolute units.
+
+    Each segment bends by curvature * length, curvature = bending moment / (E * I):
+    the moment is the weight of all wood beyond it times its horizontal lever arm,
+    I = pi r^4 / 4 for a round section. A thick old limb is far stiffer (r^4) than
+    the load it carries grows, so it holds itself up. `amount` scales 1 / E (1 =
+    green oak); a parent's bend carries its children with it.
+    """
+    E = GREEN_OAK_E / amount
+    for _ in range(iterations):
+        v = _segments(ng)
+        seg = np.linalg.norm(v, axis=1)
+        m = np.pi * r * r * seg * WOOD_DENSITY
+        M = ng.subtree_sum(m)
+        com = ng.subtree_sum(m[:, None] * ng.pos) / np.maximum(M[:, None], 1e-12)
+        base = np.zeros_like(ng.pos)
+        base[1:] = ng.pos[ng.parent[1:]]
+        lever = np.hypot(com[:, 0] - base[:, 0], com[:, 2] - base[:, 2])
+        inertia = np.pi * np.maximum(r, 1e-5) ** 4 / 4.0
+        theta = M * G * lever / (E * inertia) * seg / iterations
+        theta[0] = 0.0
+        acc = theta.copy()
+        for lvl in ng.levels()[1:]:
+            acc[lvl] += acc[ng.parent[lvl]]
+        acc = np.minimum(acc, 1.5)
         v2 = _rotate_toward(v, DOWN, acc)
         v2[0] = 0
         _rebuild(ng, v2)
@@ -121,6 +158,13 @@ def smooth_chains(ng: NodeGraph, amount: float, iterations: int = 4):
 def refine(ng: NodeGraph, r: np.ndarray, params: dict, seed: int):
     R = params["refinement"]
     smooth_chains(ng, R["smoothing"])
-    gravity_droop(ng, r, R["gravity_droop"])
+    gravity_droop(ng, r, R["gravity_droop"], model=R["droop_model"])
     phototropism(ng, r, R["phototropism"])
     noise(ng, R["noise"]["amplitude"], R["noise"]["frequency"], seed)
+    rest_on_ground(ng)
+
+
+def rest_on_ground(ng: NodeGraph):
+    """Wood cannot sag through the ground: a limb drooped below it rests on it."""
+    below = ng.pos[:, 1] < 0.0
+    ng.pos[below, 1] = 0.0

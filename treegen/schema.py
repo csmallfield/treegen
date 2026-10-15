@@ -148,6 +148,9 @@ SCHEMA: list[Param] = [
     # refinement ------------------------------------------------------------
     P("refinement", "smoothing", 0.5, lo=0, hi=1, doc="Chain smoothing before bending (removes colonization zig-zag)"),
     P("refinement", "gravity_droop", 0.45, lo=0, hi=3, doc="Sag scaled by downstreamMass"),
+    P("refinement", "droop_model", "relative", "str", choices=("relative", "elastic"),
+      doc="'relative': sag scaled to the tree's own most-loaded wood; 'elastic': beam bending in "
+          "absolute units (gravity_droop 1 = green oak), so thick limbs hold themselves up"),
     P("refinement", "phototropism", 0.2, lo=0, hi=2, doc="Bend toward the local light direction"),
     P("refinement", "noise", {"amplitude": 0.08, "frequency": 2.0}, "dict",
       doc="Low-amplitude per-node direction noise"),

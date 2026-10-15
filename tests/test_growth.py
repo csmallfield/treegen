@@ -162,3 +162,9 @@ def test_straightening_rules_reduce_limb_waviness(small_oak):
     tight = _with(small_oak, "growth", max_turn=10.0, centrifugal=1.0)
     tight = _with(tight, "architecture", branch_angle_max=65.0)
     assert sinuosity(tight) < sinuosity(loose)
+
+
+def test_drooping_limbs_rest_on_the_ground(small_oak):
+    p = _with(small_oak, "refinement", gravity_droop=3.0)
+    sk = assemble_skeleton(grow(p, Scene(), 5, 60), p, 5)
+    assert sk.points[:, 1].min() >= 0.0
