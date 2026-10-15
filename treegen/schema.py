@@ -112,6 +112,9 @@ SCHEMA: list[Param] = [
     P("buds", "max_path", 0.0, lo=0, hi=300, unit="m",
       doc="Hydraulic limitation by distance: a bud's light is also worth (1 - path / max_path), path "
           "being the length of wood from the root, so long limbs stop extending. 0 = no limit"),
+    P("buds", "wood_set", 0.0, lo=0, hi=2,
+      doc="Growth-time droop: the share of each season's elastic sag (green-oak stiffness, real "
+          "thickness) that new wood fixes in place. Bends accumulate; thick limbs stop sagging. 0 = off"),
     P("buds", "lateral_buds", 0, "int", lo=0, hi=20,
       doc="Acrotony: only the last this-many nodes of each season's shoot carry a lateral bud, so "
           "branching clusters at the end of each year's growth (strong in oak). 0 = a bud on every node"),

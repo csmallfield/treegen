@@ -102,3 +102,24 @@ def test_shadow_propagation_darkens_the_inside_of_a_crown(bud_oak):
     p = {**bud_oak, "buds": {**bud_oak["buds"], "light_model": "shadow", "shadow_a": 0.05}}
     g = grow_buds(p, Scene(), 3, 20)
     assert g.stats["alive"] > 50 and g.exposure.min() < 0.1 < g.exposure.max()
+
+
+def test_growth_time_droop_bends_long_limbs_and_spares_the_trunk(bud_oak):
+    from treegen.core.buds import _Grow, _sag
+    # a vertical trunk of 10 nodes with a horizontal limb of 20 from its top
+    n_trunk, n_limb = 10, 20
+    nodes = _Grow({"pos": (np.float64, (3,), 0.0), "parent": (np.int64, (), -1), "depth": (np.int32, (), 0),
+                   "state": (np.int8, (), 0), "ring": (np.float64, (), 0.0)})
+    nodes.reserve(n_trunk + n_limb)
+    for i in range(n_trunk):
+        nodes.pos[i] = (0.0, 0.3 * i, 0.0)
+        nodes.parent[i], nodes.depth[i], nodes.ring[i] = i - 1, i, 4000.0      # thick, stiff
+    for j in range(n_limb):
+        k = n_trunk + j
+        nodes.pos[k] = (0.3 * (j + 1), 0.3 * (n_trunk - 1), 0.0)
+        nodes.parent[k], nodes.depth[k], nodes.ring[k] = k - 1, k, 30.0       # a slender limb
+    tip = nodes.n - 1
+    tip_before, trunk_before = nodes.pos[tip].copy(), nodes.pos[:n_trunk].copy()
+    _sag(nodes, bud_oak, wood_set=1.0)
+    assert nodes.pos[tip, 1] < tip_before[1] - 0.01                         # the limb tip dropped
+    assert np.allclose(nodes.pos[:n_trunk], trunk_before, atol=1e-3)       # the trunk barely moved
