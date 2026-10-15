@@ -123,3 +123,10 @@ def test_growth_time_droop_bends_long_limbs_and_spares_the_trunk(bud_oak):
     _sag(nodes, bud_oak, wood_set=1.0)
     assert nodes.pos[tip, 1] < tip_before[1] - 0.01                         # the limb tip dropped
     assert np.allclose(nodes.pos[:n_trunk], trunk_before, atol=1e-3)       # the trunk barely moved
+
+
+def test_respiration_levels_off_growth(bud_oak):
+    free = {**bud_oak, "buds": {**bud_oak["buds"], "respiration": 0.0}}
+    costly = {**bud_oak, "buds": {**bud_oak["buds"], "respiration": 0.05}}
+    a, b = grow_buds(free, Scene(), 3, 40), grow_buds(costly, Scene(), 3, 40)
+    assert b.stats["alive"] < a.stats["alive"]                      # upkeep leaves less to grow with

@@ -33,8 +33,10 @@ SPACE = {
     "buds.shadow_depth": (3, 12, False),
     "buds.shadow_b": (1.6, 2.4, False),
     "buds.tropism": (-0.15, 0.15, False),
-    "refinement.gravity_droop": (0.3, 1.2, False),
-    "buds.max_path": (30.0, 90.0, False),
+    "buds.wood_set": (0.1, 0.6, False),
+    "buds.max_path": (50.0, 90.0, False),
+    "buds.respiration": (0.001, 0.05, True),
+    "buds.reaction_wood": (0.0, 2.0, False),
     "buds.shadow_cell": (0.18, 0.35, False),
     "buds.light_weight": (0.0, 0.6, False),
     "buds.branching_angle": (30.0, 60.0, False),
@@ -51,7 +53,7 @@ MAX_LIVE = {20.0: 20_000, 80.0: 200_000, 200.0: 1_200_000}
 
 
 def _sample(rng):
-    out = {"buds.light_model": "shadow"}
+    out = {"buds.light_model": "shadow", "refinement.gravity_droop": 0.0}   # droop happens during growth
     for k, (lo, hi, log) in SPACE.items():
         v = math.exp(rng.uniform(math.log(lo), math.log(hi))) if log else rng.uniform(lo, hi)
         out[k] = int(round(v)) if k in INTS else round(v, 4)
@@ -60,7 +62,7 @@ def _sample(rng):
 
 def _near(rng, base, spread):
     """A sample perturbed around an earlier result: spread is a fraction of each range."""
-    out = {"buds.light_model": "shadow"}
+    out = {"buds.light_model": "shadow", "refinement.gravity_droop": 0.0}   # droop happens during growth
     for k, (lo, hi, log) in SPACE.items():
         v = base.get(k, (lo + hi) / 2)
         if log:

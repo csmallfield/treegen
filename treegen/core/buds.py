@@ -29,6 +29,18 @@ into the wood, as a new ring forms on a limb that is already sagging. Bends
 accumulate over the years and carry everything beyond them; thick old limbs,
 being stiff, stop sagging. 0 = off.
 
+Reaction wood (after Almeras et al.): trees push back against sag. Each segment
+remembers the direction it grew in, and each season bends back toward it by
+reaction_wood * (this season's ring / all its rings): thin, fast-growing shoots
+straighten quickly, thick old limbs only slowly, so limbs settle into arches
+instead of collapsing. 0 = off.
+
+Maintenance respiration (carbon balance): living wood costs resource every
+season. By the pipe model every live tip is fed by sapwood running all the way to
+the root, so the cost is respiration * (sum over live tips of their path length),
+taken from the root's resource before it is shared out. A big tree's costs catch
+up with its production and its growth levels off. 0 = off.
+
 Acrotony (an architectural trait of the species, like phyllotaxis): with
 lateral_buds = k > 0, only the last k nodes of each season's shoot carry a lateral
 bud, so branching clusters at the end of each year's growth and the rest of the
@@ -213,8 +225,24 @@ def _light(params, scene, pos, leafy, bud_nodes, hscale, model):
     return q, v, field_.density.shape
 
 
-def _sag(nodes, params, wood_set, max_step=0.15):
-    """One season of growth-time droop on the live wood (see the module docstring)."""
+def _rotate_to(v, target, angle):
+    """Rotate each row of v toward the matching row of target by angle, never past it."""
+    ln = np.linalg.norm(v, axis=1, keepdims=True)
+    u = v / np.maximum(ln, 1e-12)
+    t = target / np.maximum(np.linalg.norm(target, axis=1, keepdims=True), 1e-12)
+    cos_to = np.clip((u * t).sum(1), -1.0, 1.0)
+    a = np.minimum(angle, np.arccos(cos_to))
+    axis = np.cross(u, t)
+    an = np.linalg.norm(axis, axis=1, keepdims=True)
+    ok = an[:, 0] > 1e-8
+    axis = axis / np.maximum(an, 1e-12)
+    ca, sa = np.cos(a)[:, None], np.sin(a)[:, None]
+    rot = u * ca + np.cross(axis, u) * sa + axis * (axis * u).sum(1, keepdims=True) * (1 - ca)
+    return np.where(ok[:, None], rot, u) * ln
+
+
+def _sag(nodes, params, wood_set, reaction=0.0, ring_gain=None, max_step=0.15):
+    """One season of growth-time droop on the live wood, then reaction-wood correction."""
     from .radii import WOOD_DENSITY
     from .refine import DOWN, G, GREEN_OAK_E, _rotate_toward
 
@@ -247,9 +275,14 @@ def _sag(nodes, params, wood_set, max_step=0.15):
     acc = theta.copy()
     for lvl in levels[1:]:
         acc[lvl] += acc[par[lvl]]
-    if acc.max() < 1e-6:
-        return
-    v2 = _rotate_toward(v, DOWN, np.minimum(acc, 1.5))
+    v2 = _rotate_toward(v, DOWN, np.minimum(acc, 1.5)) if acc.max() > 1e-6 else v
+    if reaction > 0 and ring_gain is not None:
+        # reaction wood: back toward the direction each segment grew in, at a rate set by how
+        # much new wood it laid down this season relative to all it has
+        rel = ring_gain[:N] / np.maximum(nodes.ring[:N], 1.0)
+        back = np.where(live, np.minimum(reaction * rel, max_step), 0.0)
+        back[0] = 0.0
+        v2 = _rotate_to(v2, nodes.dir0[:N], back)
     p = pos.copy()
     for lvl in levels[1:]:
         p[lvl] = p[par[lvl]] + v2[lvl]
@@ -369,7 +402,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     shoot, xi, eta = B["shoot_length"], B["light_weight"], B["tropism"]
     angle, phyllo = math.radians(B["branching_angle"]), math.radians(B["phyllotaxis"])
     acro = int(B["lateral_buds"])
-    wood_set = B["wood_set"]
+    wood_set, reaction, resp = B["wood_set"], B["reaction_wood"], B["respiration"]
     h_max, p_max = B["max_height"], B["max_path"]
     max_ring = np.inf                         # the shed diameter limit, in ring units (tip-years)
     if B["shed_max_diameter"] > 0:
@@ -385,6 +418,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         "ring": (np.float64, (), 0.0),                              # wood cross-section, tip-years
         "uid": (np.int64, (), 0),                                   # creation order, never changes
         "path": (np.float64, (), 0.0),                              # m of wood from the root
+        "dir0": (np.float64, (3,), 0.0),                            # direction it grew in (set point)
     })
     archive: list = []                                              # shed wood, see _archive_shed
     next_uid = 1
@@ -451,6 +485,10 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
             lvl = lvl[live[lvl]]
             np.add.at(carried, par[lvl], carried[lvl])
         nodes.ring[:N] += carried
+        upkeep = 0.0
+        if resp > 0:                               # sapwood from every live tip to the root
+            tip = live & (kids == 0)
+            upkeep = resp * float(nodes.path[:N][tip].sum())
 
         # ---- hydraulic limitation: high leaves turn their light into less resource -------------
         # (shedding above used the light itself; only the resource budget pays for height)
@@ -476,7 +514,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         np.add.at(denom, bnode, w_bud * qb)
         denom = np.maximum(denom, 1e-12)
         v = np.zeros(N)
-        v[0] = alpha * Q[0] * budget
+        v[0] = max(alpha * Q[0] * budget - upkeep, 0.0)
         for lvl in levels[1:]:
             p = par[lvl]
             v[lvl] = v[p] * w_node[lvl] * Q[lvl] / denom[p]
@@ -510,6 +548,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
             p = cur[act]
             nodes.pos[s] = nodes.pos[p] + d * length[act, None]
             nodes.path[s] = nodes.path[p] + length[act]
+            nodes.dir0[s] = d
             nodes.parent[s] = p
             nodes.birth[s] = year
             nodes.depth[s] = nodes.depth[p] + 1
@@ -529,8 +568,10 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         # the bud that grew now sits at the end of its shoot as that axis's terminal bud
         buds.node[go], buds.dir[go], buds.terminal[go] = cur, cur_dir, True
 
-        if wood_set > 0:
-            _sag(nodes, params, wood_set)
+        if wood_set > 0 or reaction > 0:
+            gain = np.zeros(nodes.n)
+            gain[: len(carried)] = carried
+            _sag(nodes, params, wood_set, reaction, gain)
         _archive_shed(nodes, buds, archive)
         if progress:
             progress(year / max(seasons, 1), f"year {year}: {nodes.n} nodes, {buds.n} buds")

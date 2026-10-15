@@ -115,6 +115,12 @@ SCHEMA: list[Param] = [
     P("buds", "wood_set", 0.0, lo=0, hi=2,
       doc="Growth-time droop: the share of each season's elastic sag (green-oak stiffness, real "
           "thickness) that new wood fixes in place. Bends accumulate; thick limbs stop sagging. 0 = off"),
+    P("buds", "reaction_wood", 0.0, lo=0, hi=5,
+      doc="Reaction wood: each season a segment bends back toward the direction it grew in by this "
+          "times its relative new growth (thin shoots quickly, thick limbs slowly). 0 = off"),
+    P("buds", "respiration", 0.0, lo=0, hi=1,
+      doc="Maintenance respiration: resource lost each season per metre of sapwood between each live "
+          "tip and the root, so a big tree's growth levels off. 0 = off"),
     P("buds", "lateral_buds", 0, "int", lo=0, hi=20,
       doc="Acrotony: only the last this-many nodes of each season's shoot carry a lateral bud, so "
           "branching clusters at the end of each year's growth (strong in oak). 0 = a bud on every node"),
