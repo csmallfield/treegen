@@ -28,7 +28,9 @@ def test_deterministic_and_seeded(bud_oak):
 
 
 def test_young_tree_is_the_start_of_the_old_one(bud_oak):
-    young, old = grow_buds(bud_oak, Scene(), 3, 10), grow_buds(bud_oak, Scene(), 3, 16)
+    # without droop: wood that sags under later growth is the same wood in a new place
+    rigid = {**bud_oak, "buds": {**bud_oak["buds"], "wood_set": 0.0, "reaction_wood": 0.0}}
+    young, old = grow_buds(rigid, Scene(), 3, 10), grow_buds(rigid, Scene(), 3, 16)
     assert len(young.pos) < len(old.pos)
     # short-lived shed twigs are dropped from the output, so compare wood rather than arrays:
     # everything the old tree grew by year 10 is in the young tree, in the same place
@@ -130,3 +132,11 @@ def test_respiration_levels_off_growth(bud_oak):
     costly = {**bud_oak, "buds": {**bud_oak["buds"], "respiration": 0.05}}
     a, b = grow_buds(free, Scene(), 3, 40), grow_buds(costly, Scene(), 3, 40)
     assert b.stats["alive"] < a.stats["alive"]                      # upkeep leaves less to grow with
+
+
+def test_buds_that_never_break_go_latent(bud_oak):
+    forever = {**bud_oak, "buds": {**bud_oak["buds"], "bud_life": 0}}
+    short = {**bud_oak, "buds": {**bud_oak["buds"], "bud_life": 2}}
+    a, b = grow_buds(forever, Scene(), 3, 40), grow_buds(short, Scene(), 3, 40)
+    assert b.stats["alive"] > 50                                    # still a tree
+    assert b.stats["alive"] < a.stats["alive"]                      # old wood stops sprouting

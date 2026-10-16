@@ -46,6 +46,12 @@ lateral_buds = k > 0, only the last k nodes of each season's shoot carry a later
 bud, so branching clusters at the end of each year's growth and the rest of the
 shoot stays bare. Oaks are strongly acrotonic. k = 0 puts a bud on every node.
 
+Bud viability: a lateral bud that has not broken within bud_life years goes
+latent and is dropped (terminal buds live as long as their axis). In oak most
+buds low on a shoot never break, and old wood rarely sprouts again; without this
+every 10 cm of old limb keeps a bud that can grow into a branch decades later
+when the crown opens. 0 = buds wait forever, as in the paper.
+
 Between gathering and allocating, a branch whose gathered light per internode is
 below shed_threshold is shed with its buds (Takenaka 1994, as in the paper): it
 costs the tree more than it earns. Apical control lambda moves from its young to
@@ -402,6 +408,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     shoot, xi, eta = B["shoot_length"], B["light_weight"], B["tropism"]
     angle, phyllo = math.radians(B["branching_angle"]), math.radians(B["phyllotaxis"])
     acro = int(B["lateral_buds"])
+    bud_life = B["bud_life"]
     wood_set, reaction, resp = B["wood_set"], B["reaction_wood"], B["respiration"]
     h_max, p_max = B["max_height"], B["max_path"]
     max_ring = np.inf                         # the shed diameter limit, in ring units (tip-years)
@@ -435,6 +442,9 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     lit = False
 
     for year in range(1, seasons + 1):
+        if bud_life > 0:                          # lateral buds that never broke go latent
+            M = buds.n
+            buds.keep(buds.terminal[:M] | (year - buds.birth[:M] <= bud_life))
         N, M = nodes.n, buds.n
         pos, par = nodes.pos[:N], nodes.parent[:N]
         bnode = buds.node[:M]

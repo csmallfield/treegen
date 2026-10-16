@@ -11,25 +11,28 @@ max_age = 200
 model = "buds"
 
 [buds]
-# calibrated by scripts/bud_calibrate.py over 20, 80 and 200 years (rank 3 of 140; chosen by eye:
-# a broad dome on a clean bole at 200 years)
+# calibrated by scripts/bud_calibrate.py over 20, 80 and 200 years, weighted toward the
+# open-grown spread at 80 years (calib8 rank 0; docs/BUD_BACKEND_DESIGN.md section 19)
 light_model = "shadow"      # the paper's shadow propagation
-shadow_a = 0.0418
-shadow_b = 2.0
-shadow_depth = 8
-shadow_cell = 0.3351
+shadow_a = 0.0429
+shadow_b = 1.9281
+shadow_depth = 10
+shadow_cell = 0.3472
 shoot_length = 0.1          # m of internode per unit of resource
-resource_per_light = 2.8223
-apical_control = 0.5389
-apical_control_old = 0.5
-shed_threshold = 0.2417
-max_height = 45.0           # m; hydraulic limit
+resource_per_light = 3.0465
+apical_control = 0.54
+apical_control_old = 0.4711
+shed_threshold = 0.2761
+max_height = 45.0           # m; hydraulic limit by height
+max_path = 71.546           # m; hydraulic limit by path length from the root
+respiration = 0.0148        # maintenance upkeep per metre of sapwood path
+wood_set = 0.1519           # growth-time droop
+reaction_wood = 0.521       # limbs pull back toward the way they grew
 lateral_buds = 0            # acrotony off
-branching_angle = 38.3156
+branching_angle = 39.9098
 phyllotaxis = 137.5
-light_weight = 0.2243
-tropism = 0.1               # eta, positive = up
-
+light_weight = 0.1019
+tropism = -0.0471           # eta, positive = up
 [architecture]
 max_order = 4
 min_radius_for_mesh = 0.04
@@ -42,7 +45,7 @@ junction_swell = 1.15
 
 [refinement]
 smoothing = 0.6
-gravity_droop = 0.45
+gravity_droop = 0.0         # droop happens during growth (buds.wood_set)
 phototropism = 0.2
 noise = { amplitude = 0.08, frequency = 2.0 }
 

@@ -121,6 +121,9 @@ SCHEMA: list[Param] = [
     P("buds", "respiration", 0.0, lo=0, hi=1,
       doc="Maintenance respiration: resource lost each season per metre of sapwood between each live "
           "tip and the root, so a big tree's growth levels off. 0 = off"),
+    P("buds", "bud_life", 0, "int", lo=0, hi=50, unit="years",
+      doc="Bud viability: a lateral bud that has not broken within this many years goes latent and "
+          "is dropped. 0 = buds wait forever"),
     P("buds", "lateral_buds", 0, "int", lo=0, hi=20,
       doc="Acrotony: only the last this-many nodes of each season's shoot carry a lateral bud, so "
           "branching clusters at the end of each year's growth (strong in oak). 0 = a bud on every node"),
