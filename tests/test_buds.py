@@ -12,6 +12,13 @@ def bud_oak():
     return load_species(ROOT / "species" / "quercus_buds.toml")
 
 
+def plain(p, **buds):
+    """The bud oak with the later additions off, so a test sees one mechanism at a time."""
+    base = {"tropism": 0.1, "bud_life": 0, "wood_set": 0.0, "reaction_wood": 0.0, "respiration": 0.0,
+            "max_path": 0.0}
+    return {**p, "buds": {**p["buds"], **base, **buds}}
+
+
 def test_grows_a_tree_with_no_envelope_or_attractors(bud_oak):
     g = grow_buds(bud_oak, Scene(), 3, 20)
     assert len(g.pos) > 200 and len(g.attractors) == 0
@@ -41,7 +48,7 @@ def test_young_tree_is_the_start_of_the_old_one(bud_oak):
 
 def test_apical_control_trades_height_for_spread(bud_oak):
     def shape(lam):
-        p = {**bud_oak, "buds": {**bud_oak["buds"], "apical_control": lam}}
+        p = plain(bud_oak, apical_control=lam)
         g = grow_buds(p, Scene(), 3, 25)
         return g.pos[:, 1].max(), 2 * np.hypot(g.pos[:, 0], g.pos[:, 2]).max()
     (h_lo, w_lo), (h_hi, w_hi) = shape(0.46), shape(0.54)
@@ -70,7 +77,7 @@ def test_shedding_removes_wood_and_keeps_the_tree_valid(bud_oak):
 
 def test_apical_control_changes_over_the_trees_life(bud_oak):
     def height(old):
-        p = {**bud_oak, "buds": {**bud_oak["buds"], "apical_control": 0.5, "apical_control_old": old},
+        p = {**plain(bud_oak, apical_control=0.5, apical_control_old=old),
              "meta": {**bud_oak["meta"], "max_age": 30}}
         return grow_buds(p, Scene(), 3, 30).pos[:, 1].max()
     assert height(0.56) > height(0.44)                              # leaders favoured late: taller
@@ -128,8 +135,7 @@ def test_growth_time_droop_bends_long_limbs_and_spares_the_trunk(bud_oak):
 
 
 def test_respiration_levels_off_growth(bud_oak):
-    free = {**bud_oak, "buds": {**bud_oak["buds"], "respiration": 0.0}}
-    costly = {**bud_oak, "buds": {**bud_oak["buds"], "respiration": 0.05}}
+    free, costly = plain(bud_oak, respiration=0.0), plain(bud_oak, respiration=0.05)
     a, b = grow_buds(free, Scene(), 3, 40), grow_buds(costly, Scene(), 3, 40)
     assert b.stats["alive"] < a.stats["alive"]                      # upkeep leaves less to grow with
 

@@ -312,6 +312,14 @@ def _sample_by_cell(field_, pts):
     return q[inverse], v[inverse]
 
 
+def _below(base, par, levels):
+    """base and everything carried by it."""
+    mark = base.copy()
+    for lvl in levels[1:]:
+        mark[lvl] |= mark[par[lvl]]
+    return mark
+
+
 def _shed(nodes, N, levels, Q, threshold, year, max_ring=np.inf):
     """Mark branches whose light per internode is below threshold; returns the shed mask or None.
 
@@ -322,9 +330,9 @@ def _shed(nodes, N, levels, Q, threshold, year, max_ring=np.inf):
     big limbs as a whole fails, because a limb carries far more wood per leaf than a
     twig and so always looks poorer than the shaded twigs it should outlive.
     The main stem is judged like a branch above the point where it carries less than
-    half the tree's tips: a leader that has lost the race to the limbs below it dies
-    back, as an old oak's does, and the crown goes on as spreading limbs. Below that
-    point it is never shed. The tips a shed branch carried are remembered on the
+    half the tips that survive the season: a leader that has lost the race to the limbs
+    below it dies back, as an old oak's does, and the crown goes on as spreading limbs.
+    Below that point it is never shed. The tips a shed branch carried are remembered on the
     node it left, so the wood below keeps the thickness it grew to support.
     """
     par = nodes.parent[:N]
@@ -336,18 +344,28 @@ def _shed(nodes, N, levels, Q, threshold, year, max_ring=np.inf):
     for lvl in reversed(levels[1:]):
         np.add.at(size, par[lvl], size[lvl])
         np.add.at(tips, par[lvl], tips[lvl])
-    trunk = nodes.main[:N].copy()                                   # the main stem: main all the way down
+    small = nodes.ring[:N] < max_ring
+    starved = live & np.where(small, Q < threshold * size, Q <= 0.0)
+    base = starved & ~nodes.main[:N]
+    base[0] = False
+    mark = _below(base, par, levels)
+    # the stem, judged against the limbs that survive this season: it dies back only where
+    # it carries less than half of what they carry, so a leader is lost to thriving limbs,
+    # never in a bad year when the whole crown is short of light
+    trunk = nodes.main[:N].copy()
     for lvl in levels[1:]:
         trunk[lvl] &= trunk[par[lvl]]
-    judged = ~nodes.main[:N] | (trunk & (tips < 0.5 * tips[0]))
-    small = nodes.ring[:N] < max_ring
-    base = live & judged & np.where(small, Q < threshold * size, Q <= 0.0)
-    base[0] = False
+    kept = (live & ~mark & (kids == 0)).astype(np.float64)
+    for lvl in reversed(levels[1:]):
+        np.add.at(kept, par[lvl], kept[lvl])
+    stem_kept = kept[1] if N > 1 else kept[0]
+    lost = starved & trunk & (kept < 0.5 * stem_kept) & ~mark
+    lost[:2] = False
+    if lost.any():
+        base |= lost
+        mark = _below(base, par, levels)
     if not base.any():
         return None
-    mark = base.copy()
-    for lvl in levels[1:]:
-        mark[lvl] |= mark[par[lvl]]
     mark &= live
     top = np.flatnonzero(base & ~mark[np.maximum(par, 0)])          # outermost shed branches only
     np.add.at(nodes.shed_tips, par[top], tips[top])
@@ -452,6 +470,8 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         if bud_life > 0:                          # lateral buds that never broke go latent
             M = buds.n
             buds.keep(buds.terminal[:M] | (year - buds.birth[:M] <= bud_life))
+        if buds.n == 0:                           # nothing left to grow from: the tree has died
+            break
         N, M = nodes.n, buds.n
         pos, par = nodes.pos[:N], nodes.parent[:N]
         bnode = buds.node[:M]
@@ -598,7 +618,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     tree = _assemble(nodes, archive)
     N = len(tree["uid"])
     pos = tree["pos"]
-    if not lit or seasons == 0:
+    if not lit or seasons == 0 or buds.n == 0:
         expo, ldir = np.ones(N, np.float32), np.tile(np.array([0, 1, 0], np.float32), (N, 1))
     else:
         leafy = tree["birth"] >= seasons - 1
