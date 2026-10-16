@@ -40,8 +40,9 @@ SPACE = {
     "buds.shadow_cell": (0.18, 0.35, False),
     "buds.light_weight": (0.0, 0.6, False),
     "buds.branching_angle": (30.0, 60.0, False),
+    "buds.bud_life": (2, 12, False),
 }
-INTS = {"buds.shadow_depth"}
+INTS = {"buds.shadow_depth", "buds.bud_life"}
 
 # age: {metric: target}; first fork and fork gap are offset so zero is not infinitely bad
 TARGETS = {
@@ -56,8 +57,14 @@ WEIGHT_PRESETS = {
     # favour the spreading open-grown crown at 80 years (the user's reference tree spreads 25 m)
     "spread80": {(80.0, "crown_width"): 4.0, (80.0, "first_fork"): 2.0,
                  (80.0, "fork_gap_inner"): 0.5, (200.0, "fork_gap_inner"): 0.5},
+    # spread80, plus old limbs that spider out from the trunk instead of rising
+    "oak": {(80.0, "crown_width"): 4.0, (80.0, "first_fork"): 2.0,
+            (80.0, "fork_gap_inner"): 0.5, (200.0, "fork_gap_inner"): 0.5,
+            (80.0, "limb_angle"): 2.0, (200.0, "limb_angle"): 3.0},
 }
 SPREAD80_WIDTH = 25.0
+LIMB_ANGLE = {80.0: 50.0, 200.0: 60.0}   # deg from vertical; the reference tree's limbs are at 49 at 80
+ANGLE_SCALE = 30.0                       # deg off that counts like a factor of e in size
 
 
 def _sample(rng):
@@ -93,8 +100,11 @@ def _score(job):
 def _targets(preset):
     """Targets and error weights for a weighting preset (built here so worker processes agree)."""
     targets = {age: dict(t) for age, t in TARGETS.items()}
-    if preset == "spread80":
+    if preset in ("spread80", "oak"):
         targets[80.0]["crown_width"] = SPREAD80_WIDTH
+    if preset == "oak":
+        for age, a in LIMB_ANGLE.items():
+            targets[age]["limb_angle"] = a
     return targets, WEIGHT_PRESETS[preset]
 
 
@@ -124,7 +134,9 @@ def _score_one(job):
         m = tree_metrics(assemble_skeleton(g, p, 42))
         for key, target in targets.items():
             v = m[key]
-            if key in ("first_fork", "fork_gap_inner"):                 # a limb can droop below 0
+            if key == "limb_angle":
+                e = (v - target) / ANGLE_SCALE
+            elif key in ("first_fork", "fork_gap_inner"):                 # a limb can droop below 0
                 e = math.log((max(v, 0.0) + 0.5) / (target + 0.5))
             else:
                 e = math.log(max(v, 1e-3) / target)

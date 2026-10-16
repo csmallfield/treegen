@@ -65,7 +65,35 @@ def tree_metrics(sk) -> dict:
         "stick_mid": stick_mid,
         "fork_gap_inner": gap_inner,
         "fork_gap_outer": gap_outer,
+        "limb_angle": _limb_angle(sk),
     }
+
+
+def _limb_angle(sk, ratio: float = 0.2) -> float:
+    """How far the main limbs lean out from vertical, in degrees (0 = straight up).
+
+    Main limbs are axes whose base is at least ratio of the trunk's radius at breast
+    height, wherever they start. Each is read along the chord over the first half
+    of its length, so a limb that sags out and turns its tip up counts by its sag,
+    and the angles are averaged weighted by base cross-section (big limbs dominate,
+    as they do to the eye); shed limbs do not count. An old open-grown oak's limbs
+    spider out at 55-65 deg.
+    """
+    r_min = ratio * sk.dbh / 2
+    ang, wts = [], []
+    for c in np.flatnonzero(sk.order >= 1):
+        a, b = sk.offsets[c], sk.offsets[c + 1]
+        if b - a < 3 or sk.dead[a + 1] or sk.radius[a + 1] < r_min:
+            continue
+        s = sk.arc_length[a:b] - sk.arc_length[a]
+        half = a + int(np.searchsorted(s, s[-1] / 2))
+        chord = sk.points[max(half, a + 1)] - sk.points[a]
+        n = np.linalg.norm(chord)
+        if n < 1e-6:
+            continue
+        ang.append(np.degrees(np.arccos(np.clip(chord[1] / n, -1.0, 1.0))))
+        wts.append(sk.radius[a + 1] ** 2)
+    return float(np.average(ang, weights=wts)) if ang else 0.0
 
 
 def _sticks(sk):

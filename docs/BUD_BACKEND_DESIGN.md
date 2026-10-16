@@ -668,3 +668,20 @@ stays in bounds at 200. The good region: respiration about 0.008-0.017,
 reaction wood 0.4-0.8, wood_set 0.14-0.26, tropism slightly negative (-0.05 to
 -0.06). Open: the first fork sits low (1.9 m against 3 m), and old crowns are
 dense in the interior.
+
+**Rank 0 adopted** into `species/quercus_buds.toml` (refinement droop 0: limbs
+droop during growth). Its weak points against the reference 80-year tree: a low
+first fork (a limb at 1.9 m, a co-dominant stem at 3.1 m) and a dense old crown.
+
+- Stronger young apical control (0.58, 0.62) does not raise the fork; it feeds
+  the leader and the tree runs away (36-44 m at 80 years).
+- A carbon balance per branch (shed when its own resource cannot pay its
+  sapwood upkeep) never acts: with the calibrated respiration even thick shaded
+  limbs earn 8-15 times their upkeep, so it would need a factor of about 8,
+  which is a tuning knob, not a rule. Dropped.
+- **Bud viability (`bud_life`)**: a lateral bud that has not broken within a
+  few years goes latent and is dropped. Without it every 10 cm of old limb
+  keeps a bud that can grow into a branch whenever the crown opens. At 4 years
+  the 200-year crown opens into a few massive limbs (live nodes 105 k -> 22 k);
+  at 8 years the 80-year tree is closest to the reference. `fork_gap_inner`
+  barely moves (0.2-0.3 m), so it does not read this change; judged by eye.
