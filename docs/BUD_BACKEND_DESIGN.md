@@ -685,3 +685,14 @@ first fork (a limb at 1.9 m, a co-dominant stem at 3.1 m) and a dense old crown.
   the 200-year crown opens into a few massive limbs (live nodes 105 k -> 22 k);
   at 8 years the 80-year tree is closest to the reference. `fork_gap_inner`
   barely moves (0.2-0.3 m), so it does not read this change; judged by eye.
+
+**Limb angle** (`limb_angle` metric: main limbs' lean from vertical over the
+first half of their length, weighted by cross-section). Reference tree 49 deg
+at 80 years; bud lifetime 4 alone 28-33 deg (a vase). Scored in the `oak`
+weighting (50 deg at 80, 60 at 200). Low reaction wood (0.1-0.3) is what lets
+old limbs spread. Best trees then kept a thin bare leader above the old crown,
+because the main stem could never be shed; it is now judged like a branch
+above the point where it carries less than half the tree's tips, and dies back
+as an old oak's does. After that (calib11, 100 samples): rank 1 meets the
+200-year crown (32 m, 61 deg) with a 3 m fork; rank 2 is the most open
+spidering old frame (31 m, 66 deg) but only 19 m tall.
