@@ -638,3 +638,33 @@ read by the bud model only in guide or mask mode; per-instance overrides belong
 in the scene. Oak values to be checked against the bud oak's own shape first
 (open-grown proportions: spread ratio about 1.0-1.2, crown base at a quarter to a
 third of height, a broad dome).
+
+## 19. Path length, droop, upkeep (2026-10-16)
+
+**Added.** Hydraulics by path length from the root (`max_path`, scaling the
+whole tree's budget by the light-weighted mean of 1 - path/max_path; scaling
+each bud instead moved growth to the base of the tree). Growth-time droop
+(`wood_set`: a share of each season's elastic sag under the real wood load, set
+into the wood). Reaction wood (`reaction_wood`: each segment bends back toward
+the direction it grew in, in proportion to its new ring). Maintenance
+respiration (`respiration`: upkeep per metre of sapwood from each live tip to
+the root, taken from the root's resource). With droop in growth, the refinement
+droop is set to 0 for the bud oak.
+
+**Result.** Path length alone stopped the overgrowth at 200 years but lost the
+spreading 80-year oak; droop without reaction wood collapsed old crowns;
+respiration and reaction wood together give back both. A search weighted toward
+the 80-year spread (`--weights spread80`: crown width 25 m at 80 years counted
+four times, first fork twice; 100 samples near the best earlier results) found:
+
+| rank | 80 y DBH / height / width / fork | 200 y DBH / height / width | live nodes 200 y |
+|---|---|---|---|
+| 0 | 0.85 / 22.3 / 25.3 / 1.9 | 2.03 / 24.4 / 34.8 | 105 k |
+| 1 | 0.98 / 24.8 / 22.1 / 1.9 | 2.81 / 29.0 / 35.7 | 298 k |
+| 2 | 0.54 / 21.8 / 17.4 / 2.5 | 1.65 / 27.2 / 28.5 | 73 k |
+
+Rank 0 at 80 years is close to the reference tree (section 18, rank 1) and
+stays in bounds at 200. The good region: respiration about 0.008-0.017,
+reaction wood 0.4-0.8, wood_set 0.14-0.26, tropism slightly negative (-0.05 to
+-0.06). Open: the first fork sits low (1.9 m against 3 m), and old crowns are
+dense in the interior.

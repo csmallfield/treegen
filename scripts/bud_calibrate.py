@@ -50,6 +50,14 @@ TARGETS = {
     200.0: {"dbh": 1.6, "height": 27.0, "crown_width": 32.0, "first_fork": 3.0, "fork_gap_inner": 2.0},
 }
 MAX_LIVE = {20.0: 20_000, 80.0: 200_000, 200.0: 1_200_000}
+# how much each error counts (default 1); --weights selects a preset
+WEIGHT_PRESETS = {
+    "even": {},
+    # favour the spreading open-grown crown at 80 years (the user's reference tree spreads 25 m)
+    "spread80": {(80.0, "crown_width"): 4.0, (80.0, "first_fork"): 2.0,
+                 (80.0, "fork_gap_inner"): 0.5, (200.0, "fork_gap_inner"): 0.5},
+}
+SPREAD80_WIDTH = 25.0
 
 
 def _sample(rng):
@@ -82,8 +90,17 @@ def _score(job):
         return job[0], 99.0, {"failed": f"{type(e).__name__}: {e}"}, 0.0
 
 
+def _targets(preset):
+    """Targets and error weights for a weighting preset (built here so worker processes agree)."""
+    targets = {age: dict(t) for age, t in TARGETS.items()}
+    if preset == "spread80":
+        targets[80.0]["crown_width"] = SPREAD80_WIDTH
+    return targets, WEIGHT_PRESETS[preset]
+
+
 def _score_one(job):
-    sets, species = job
+    sets, species, preset = job
+    targets_all, weights = _targets(preset)
     sys.path.insert(0, str(ROOT))
     from treegen.core.buds import grow_buds
     from treegen.metrics import tree_metrics
@@ -97,7 +114,7 @@ def _score_one(job):
     p = validate(p, "calibrate")
     t = time.perf_counter()
     err, detail = 0.0, {}
-    for age, targets in TARGETS.items():
+    for age, targets in targets_all.items():
         try:
             g = grow_buds(p, Scene(), 42, age)
         except RuntimeError:
@@ -111,7 +128,7 @@ def _score_one(job):
                 e = math.log((max(v, 0.0) + 0.5) / (target + 0.5))
             else:
                 e = math.log(max(v, 1e-3) / target)
-            err += e * e
+            err += weights.get((age, key), 1.0) * e * e
             detail[f"{key}@{age:g}"] = round(v, 2)
         detail[f"live@{age:g}"] = g.stats["alive"]
     return sets, err, detail, time.perf_counter() - t
@@ -128,6 +145,7 @@ def main(argv=None):
     ap.add_argument("--top", type=int, default=5, help="how many of its best results to sample near")
     ap.add_argument("--local", type=float, default=0.5, help="share of samples drawn near them")
     ap.add_argument("--spread", type=float, default=0.12, help="perturbation, as a fraction of each range")
+    ap.add_argument("--weights", default="even", choices=sorted(WEIGHT_PRESETS), help="error weighting preset")
     args = ap.parse_args(argv)
     rng = random.Random(args.seed)
     bases = []
@@ -136,9 +154,9 @@ def main(argv=None):
     jobs = []
     for i in range(args.samples):
         if bases and rng.random() < args.local:
-            jobs.append((_near(rng, rng.choice(bases), args.spread), args.species))
+            jobs.append((_near(rng, rng.choice(bases), args.spread), args.species, args.weights))
         else:
-            jobs.append((_sample(rng), args.species))
+            jobs.append((_sample(rng), args.species, args.weights))
     results = []
     with ProcessPoolExecutor(max_workers=args.workers) as pool:
         for i, (sets, err, detail, dt) in enumerate(pool.map(_score, jobs), 1):
