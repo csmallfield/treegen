@@ -10,7 +10,13 @@ axis ends in a terminal bud. Each season:
                   lambda * Q_main : (1 - lambda) * Q_lateral   (extended Borchert-Honda)
     4. bud fate   a bud with resource v grows floor(v) internodes of length
                   shoot_length * v / floor(v); below 1 it stays dormant
-    5. direction  each internode = default orientation + xi * V + eta * up
+    5. direction  each internode = default orientation + xi * V + eta * G
+
+G is the shoot's gravitropic set point (Digby and Firn 1995): straight up for the
+main stem (orthotropic), and for every other axis a direction lateral_angle from
+vertical in the shoot's own azimuth (plagiotropic). Oak side shoots grow out at an
+angle of their own rather than toward vertical; that, plus the sag of their weight,
+is what spreads the crown. With lateral_angle = 0 every shoot is pulled straight up.
 
 Hydraulic limitation (Ryan and Yoder 1997; Koch et al. 2004): supplying water to a
 leaf gets harder with its height (gravity) and with the length of wood the water
@@ -31,9 +37,9 @@ being stiff, stop sagging. 0 = off.
 
 Reaction wood (after Almeras et al.): trees push back against sag. Each segment
 remembers the direction it grew in, and each season bends back toward it by
-reaction_wood * (this season's ring / all its rings): thin, fast-growing shoots
-straighten quickly, thick old limbs only slowly, so limbs settle into arches
-instead of collapsing. 0 = off.
+reaction_wood * (this season's ring / all its rings) per metre of wood, like the
+sag it answers: thin, fast-growing shoots straighten quickly, thick old limbs
+only slowly, so limbs settle into arches instead of collapsing. 0 = off.
 
 Maintenance respiration (carbon balance): living wood costs resource every
 season. By the pipe model every live tip is fed by sapwood running all the way to
@@ -284,9 +290,10 @@ def _sag(nodes, params, wood_set, reaction=0.0, ring_gain=None, max_step=0.15):
     v2 = _rotate_toward(v, DOWN, np.minimum(acc, 1.5)) if acc.max() > 1e-6 else v
     if reaction > 0 and ring_gain is not None:
         # reaction wood: back toward the direction each segment grew in, at a rate set by how
-        # much new wood it laid down this season relative to all it has
+        # much new wood it laid down this season relative to all it has. Per metre of wood,
+        # like the sag it answers, so internode length does not change the balance
         rel = ring_gain[:N] / np.maximum(nodes.ring[:N], 1.0)
-        back = np.where(live, np.minimum(reaction * rel, max_step), 0.0)
+        back = np.where(live, np.minimum(reaction * rel * seg, max_step), 0.0)
         back[0] = 0.0
         v2 = _rotate_to(v2, nodes.dir0[:N], back)
     p = pos.copy()
@@ -310,6 +317,22 @@ def _sample_by_cell(field_, pts):
     centre = field_.origin + (idx[first] + 0.5) * field_.voxel
     q, v = field_.sample(centre)
     return q[inverse], v[inverse]
+
+
+def _set_point(direction, on_stem, angle, phi):
+    """Each shoot's gravitropic set point: up on the main stem, else angle from vertical
+    in the shoot's own azimuth (phi where the shoot points straight up)."""
+    out = np.tile(UP, (len(direction), 1))
+    if angle <= 0:
+        return out
+    h = direction.copy()
+    h[:, 1] = 0.0
+    hn = np.linalg.norm(h, axis=1)
+    flat = hn < 1e-6
+    h[flat] = np.stack([np.cos(phi[flat]), np.zeros(flat.sum()), np.sin(phi[flat])], axis=1)
+    h /= np.maximum(np.linalg.norm(h, axis=1, keepdims=True), 1e-12)
+    side = math.sin(angle) * h + math.cos(angle) * UP
+    return np.where(on_stem[:, None], out, side)
 
 
 def _below(base, par, levels):
@@ -435,6 +458,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     acro = int(B["lateral_buds"])
     bud_life = B["bud_life"]
     wood_set, reaction, resp = B["wood_set"], B["reaction_wood"], B["respiration"]
+    gsa = math.radians(B["lateral_angle"])
     h_max, p_max = B["max_height"], B["max_path"]
     max_ring = np.inf                         # the shed diameter limit, in ring units (tip-years)
     if B["shed_max_diameter"] > 0:
@@ -451,6 +475,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         "uid": (np.int64, (), 0),                                   # creation order, never changes
         "path": (np.float64, (), 0.0),                              # m of wood from the root
         "dir0": (np.float64, (3,), 0.0),                            # direction it grew in (set point)
+        "stem": (bool, (), False),                                  # on the main stem (orthotropic)
     })
     archive: list = []                                              # shed wood, see _archive_shed
     next_uid = 1
@@ -460,6 +485,7 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
     }, cap=4096)
 
     nodes.reserve(1)                                                # the seedling: one node, one bud
+    nodes.stem[0] = True
     s = buds.reserve(1)
     buds.dir[s], buds.terminal[s], buds.birth[s] = UP, True, -1.0
     stats = {"seasons": seasons, "shoots": 0, "shed_nodes": 0, "grid": [0, 0, 0]}
@@ -576,20 +602,23 @@ def grow_buds(params: dict, scene: Scene, seed: int, age: float, progress=None) 
         # ---- 5. extend every growing shoot one internode at a time ------------------------------
         for k in range(int(count_g.max())):
             act = np.flatnonzero(count_g > k)
-            d = normalize(cur_dir[act] + xi * light[act] + eta * UP)
+            p = cur[act]
+            starts_axis = lateral_start[act] & (k == 0)
+            on_stem = nodes.stem[p] & ~starts_axis
+            set_pt = _set_point(cur_dir[act], on_stem, gsa, nodes.phi[p])
+            d = normalize(cur_dir[act] + xi * light[act] + eta * set_pt)
             s = nodes.reserve(len(act))
             ids = np.arange(s.start, s.stop)
             uids = np.arange(next_uid, next_uid + len(act))
             next_uid += len(act)
             nodes.uid[s] = uids
-            p = cur[act]
+            nodes.stem[s] = on_stem
             nodes.pos[s] = nodes.pos[p] + d * length[act, None]
             nodes.path[s] = nodes.path[p] + length[act]
             nodes.dir0[s] = d
             nodes.parent[s] = p
             nodes.birth[s] = year
             nodes.depth[s] = nodes.depth[p] + 1
-            starts_axis = lateral_start[act] & (k == 0)
             nodes.main[s] = ~starts_axis
             # phyllotaxis runs along an axis; a new axis starts at its own (seeded) azimuth
             nodes.phi[s] = np.where(starts_axis, 2 * math.pi * hash01(uids, seed, 23), nodes.phi[p] + phyllo)

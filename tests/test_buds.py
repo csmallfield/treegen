@@ -146,3 +146,13 @@ def test_buds_that_never_break_go_latent(bud_oak):
     a, b = grow_buds(forever, Scene(), 3, 40), grow_buds(short, Scene(), 3, 40)
     assert b.stats["alive"] > 50                                    # still a tree
     assert b.stats["alive"] < a.stats["alive"]                      # old wood stops sprouting
+
+
+def test_side_shoots_grow_toward_their_set_point(bud_oak):
+    def lateral_rise(angle):
+        g = grow_buds(plain(bud_oak, lateral_angle=angle, tropism=0.5), Scene(), 3, 15)
+        d = g.pos[1:] - g.pos[g.parent[1:]]
+        d /= np.maximum(np.linalg.norm(d, axis=1, keepdims=True), 1e-12)
+        side = np.hypot(g.pos[1:, 0], g.pos[1:, 2]) > 0.3                # off the stem
+        return d[side, 1].mean()
+    assert lateral_rise(70.0) < lateral_rise(0.0)                   # plagiotropic shoots run flatter

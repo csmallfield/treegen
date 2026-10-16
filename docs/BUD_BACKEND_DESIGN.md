@@ -696,3 +696,33 @@ above the point where it carries less than half the tree's tips, and dies back
 as an old oak's does. After that (calib11, 100 samples): rank 1 meets the
 200-year crown (32 m, 61 deg) with a 3 m fork; rank 2 is the most open
 spidering old frame (31 m, 66 deg) but only 19 m tall.
+
+## 20. Stiff limbs (2026-10-16)
+
+Rank 2 of calib11 adopted. Its limbs read as stiff: they stick out straight
+rather than sag. Findings:
+
+- **Upward shoots stall the tree.** Holding tropism at 0 or above (calib12, 100
+  samples) made every target worse; with tropism 0.3-0.6 trees stall at a few
+  hundred nodes. The paper's shadow falls straight down, so shoots stacked
+  vertically shade each other and are shed. Every search drifting to negative
+  tropism is this: the light model punishes upward growth. This is the likely
+  root cause of the stiff, held-out look.
+- **Set-point angles (`lateral_angle`, gravitropic set point; Digby and Firn
+  1995).** Side shoots pulled toward an angle from vertical, the stem straight
+  up. Arches do appear, but the dominant upright leader makes a layered,
+  conifer-like tree. Oak follows Rauh's architectural model (Halle, Oldeman and
+  Tomlinson 1978): its branches are orthotropic, like the trunk, and spread by
+  insertion angle and weight. Kept as an option for plagiotropic species, off
+  for oak.
+- **Reaction wood was per segment, droop per metre.** With 10 cm internodes it
+  outweighed the sag it answers about tenfold. Now per metre; the oak's value
+  is rescaled (0.0809 -> 0.809) so the reference tree is nearly unchanged.
+  Weaker reaction with more droop lets limbs sag and sweep.
+- `limb_bend` (chord over the first half against the limb's first metre) does
+  not read the look: the reference tree scores -6 deg (limbs leave flat, then
+  rise), stiff trees 0-10 deg.
+
+Next: shadows from the sky rather than straight down, so that upward growth is
+not self-defeating and spread can come from light rather than from a negative
+tropism.

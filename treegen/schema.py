@@ -115,9 +115,10 @@ SCHEMA: list[Param] = [
     P("buds", "wood_set", 0.0, lo=0, hi=2,
       doc="Growth-time droop: the share of each season's elastic sag (green-oak stiffness, real "
           "thickness) that new wood fixes in place. Bends accumulate; thick limbs stop sagging. 0 = off"),
-    P("buds", "reaction_wood", 0.0, lo=0, hi=5,
+    P("buds", "reaction_wood", 0.0, lo=0, hi=50,
       doc="Reaction wood: each season a segment bends back toward the direction it grew in by this "
-          "times its relative new growth (thin shoots quickly, thick limbs slowly). 0 = off"),
+          "times its relative new growth, per metre of wood (thin shoots quickly, thick limbs "
+          "slowly). 0 = off"),
     P("buds", "respiration", 0.0, lo=0, hi=1,
       doc="Maintenance respiration: resource lost each season per metre of sapwood between each live "
           "tip and the root, so a big tree's growth levels off. 0 = off"),
@@ -132,7 +133,11 @@ SCHEMA: list[Param] = [
     P("buds", "phyllotaxis", 137.5, lo=0, hi=360, unit="deg",
       doc="Rotation between successive lateral buds along an axis"),
     P("buds", "light_weight", 0.2, lo=0, hi=3, doc="xi: pull of each new internode toward the best light"),
-    P("buds", "tropism", 0.1, lo=-3, hi=3, doc="eta: pull of each new internode up (positive) or down (negative)"),
+    P("buds", "tropism", 0.1, lo=-3, hi=3,
+      doc="eta: pull of each new internode toward its set point (positive) or away from it (negative)"),
+    P("buds", "lateral_angle", 0.0, lo=0, hi=120, unit="deg",
+      doc="Gravitropic set point of side shoots, from vertical; the main stem's is always up. "
+          "0 = every shoot is pulled straight up"),
     # architecture ----------------------------------------------------------
     P("architecture", "branch_angle", {"mean": 48.0, "var": 12.0}, "dict", unit="deg",
       doc="Minimum divergence between a lateral and its sibling continuation"),

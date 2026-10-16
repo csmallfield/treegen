@@ -86,7 +86,7 @@ def main(argv=None):
         results = list(pool.map(_run, jobs))
 
     print(f"{args.scene}  " + "  ".join(f"{k}={v}" for k, v in overrides))
-    print(f"{'age':>5} {'DBH':>12} {'height':>16} {'width':>6} {'1st fork':>9} {'limbs':>6} {'gap in/out':>11} "
+    print(f"{'age':>5} {'DBH':>12} {'height':>16} {'width':>6} {'1st fork':>9} {'limbs':>6} {'bend':>5} {'gap in/out':>11} "
           f"{'branches':>8} {'whips':>5} {'live/total nodes':>18} {'time':>7}")
     for age, m, err, dt in results:
         if m is None:
@@ -94,7 +94,7 @@ def main(argv=None):
             continue
         dbh_t, (h_lo, h_hi) = TARGETS.get(age, (float("nan"), (0, 0)))
         print(f"{age:5g} {m['dbh']:5.2f} ({dbh_t:4.2f}) {m['height']:5.1f} ({h_lo:g}-{h_hi:g}) {m['crown_width']:6.1f} "
-              f"{m['first_fork']:9.1f} {m['limb_angle']:6.0f} {m['fork_gap_inner']:5.2f}/{m['fork_gap_outer']:4.2f} {m['branches']:8d} {m['whips']:5d} "
+              f"{m['first_fork']:9.1f} {m['limb_angle']:6.0f} {m['limb_bend']:5.0f} {m['fork_gap_inner']:5.2f}/{m['fork_gap_outer']:4.2f} {m['branches']:8d} {m['whips']:5d} "
               f"{m['live']:8d}/{m['total']:<9d} {dt:6.1f}s")
     return 0
 

@@ -46,6 +46,7 @@ def tree_metrics(sk) -> dict:
 
     stick_inner, stick_mid = _sticks(sk)
     gap_inner, gap_outer = _fork_gaps(sk)
+    lean, bend = _limbs(sk)
 
     lp = pts[live]
     rad = np.hypot(lp[:, 0], lp[:, 2])
@@ -65,35 +66,45 @@ def tree_metrics(sk) -> dict:
         "stick_mid": stick_mid,
         "fork_gap_inner": gap_inner,
         "fork_gap_outer": gap_outer,
-        "limb_angle": _limb_angle(sk),
+        "limb_angle": lean,
+        "limb_bend": bend,
     }
 
 
-def _limb_angle(sk, ratio: float = 0.2) -> float:
-    """How far the main limbs lean out from vertical, in degrees (0 = straight up).
+def _limbs(sk, ratio: float = 0.2) -> tuple[float, float]:
+    """(lean, bend) of the main limbs, in degrees.
 
     Main limbs are axes whose base is at least ratio of the trunk's radius at breast
-    height, wherever they start. Each is read along the chord over the first half
-    of its length, so a limb that sags out and turns its tip up counts by its sag,
-    and the angles are averaged weighted by base cross-section (big limbs dominate,
-    as they do to the eye); shed limbs do not count. An old open-grown oak's limbs
-    spider out at 55-65 deg.
+    height, wherever they start; shed limbs do not count. Lean is the angle from
+    vertical of the chord over the first half of each limb, so a limb that sags out
+    and turns its tip up counts by its sag; an old open-grown oak's limbs spider out
+    at 55-65 deg. Bend is how far that chord has dropped below the limb's direction
+    where it leaves its parent (its first metre): near 0 for a stiff, straight limb,
+    tens of degrees for one arching under its weight. Both are averaged weighted by
+    base cross-section, so big limbs dominate, as they do to the eye.
     """
     r_min = ratio * sk.dbh / 2
-    ang, wts = [], []
+    lean, bend, wts = [], [], []
     for c in np.flatnonzero(sk.order >= 1):
         a, b = sk.offsets[c], sk.offsets[c + 1]
         if b - a < 3 or sk.dead[a + 1] or sk.radius[a + 1] < r_min:
             continue
         s = sk.arc_length[a:b] - sk.arc_length[a]
-        half = a + int(np.searchsorted(s, s[-1] / 2))
-        chord = sk.points[max(half, a + 1)] - sk.points[a]
-        n = np.linalg.norm(chord)
-        if n < 1e-6:
+        half = max(a + int(np.searchsorted(s, s[-1] / 2)), a + 1)
+        first = max(a + int(np.searchsorted(s, min(1.0, s[-1] / 4))), a + 1)
+        chord = sk.points[half] - sk.points[a]
+        start = sk.points[first] - sk.points[a]
+        n, m = np.linalg.norm(chord), np.linalg.norm(start)
+        if n < 1e-6 or m < 1e-6:
             continue
-        ang.append(np.degrees(np.arccos(np.clip(chord[1] / n, -1.0, 1.0))))
+        a_half = np.degrees(np.arccos(np.clip(chord[1] / n, -1.0, 1.0)))
+        a_start = np.degrees(np.arccos(np.clip(start[1] / m, -1.0, 1.0)))
+        lean.append(a_half)
+        bend.append(a_half - a_start)
         wts.append(sk.radius[a + 1] ** 2)
-    return float(np.average(ang, weights=wts)) if ang else 0.0
+    if not wts:
+        return 0.0, 0.0
+    return float(np.average(lean, weights=wts)), float(np.average(bend, weights=wts))
 
 
 def _sticks(sk):

@@ -36,7 +36,7 @@ SPACE = {
     "buds.wood_set": (0.1, 0.6, False),
     "buds.max_path": (50.0, 90.0, False),
     "buds.respiration": (0.001, 0.05, True),
-    "buds.reaction_wood": (0.0, 2.0, False),
+    "buds.reaction_wood": (0.0, 10.0, False),
     "buds.shadow_cell": (0.18, 0.35, False),
     "buds.light_weight": (0.0, 0.6, False),
     "buds.branching_angle": (30.0, 60.0, False),
