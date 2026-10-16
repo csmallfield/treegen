@@ -12,27 +12,29 @@ model = "buds"
 
 [buds]
 # calibrated by scripts/bud_calibrate.py over 20, 80 and 200 years, weighted toward the
-# open-grown spread at 80 years (calib8 rank 0; docs/BUD_BACKEND_DESIGN.md section 19)
+# open-grown spread at 80 years (calib11 rank 2; docs/BUD_BACKEND_DESIGN.md section 19)
 light_model = "shadow"      # the paper's shadow propagation
-shadow_a = 0.0429
-shadow_b = 1.9281
+shadow_a = 0.0488
+shadow_b = 1.8072
 shadow_depth = 10
-shadow_cell = 0.3472
+shadow_cell = 0.3485
 shoot_length = 0.1          # m of internode per unit of resource
-resource_per_light = 3.0465
+resource_per_light = 2.8844
 apical_control = 0.54
-apical_control_old = 0.4711
-shed_threshold = 0.2761
+apical_control_old = 0.4801
+shed_threshold = 0.2617
 max_height = 45.0           # m; hydraulic limit by height
-max_path = 71.546           # m; hydraulic limit by path length from the root
-respiration = 0.0148        # maintenance upkeep per metre of sapwood path
-wood_set = 0.1519           # growth-time droop
-reaction_wood = 0.521       # limbs pull back toward the way they grew
+max_path = 68.0488           # m; hydraulic limit by path length from the root
+respiration = 0.0225        # maintenance upkeep per metre of sapwood path
+wood_set = 0.1              # growth-time droop
+reaction_wood = 0.0809      # limbs pull back toward the way they grew
+bud_life = 5                # years before an unbroken lateral bud goes latent
 lateral_buds = 0            # acrotony off
-branching_angle = 39.9098
+branching_angle = 40.8055
 phyllotaxis = 137.5
-light_weight = 0.1019
-tropism = -0.0471           # eta, positive = up
+light_weight = 0.1404
+tropism = -0.1149           # eta, positive = up
+
 [architecture]
 max_order = 4
 min_radius_for_mesh = 0.04

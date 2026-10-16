@@ -32,7 +32,7 @@ SPACE = {
     "buds.resource_per_light": (2.5, 6.0, True),
     "buds.shadow_depth": (3, 12, False),
     "buds.shadow_b": (1.6, 2.4, False),
-    "buds.tropism": (-0.15, 0.15, False),
+    "buds.tropism": (0.0, 0.15, False),           # oak shoots grow up; spread comes from droop
     "buds.wood_set": (0.1, 0.6, False),
     "buds.max_path": (50.0, 90.0, False),
     "buds.respiration": (0.001, 0.05, True),
@@ -60,7 +60,7 @@ WEIGHT_PRESETS = {
     # spread80, plus old limbs that spider out from the trunk instead of rising
     "oak": {(80.0, "crown_width"): 4.0, (80.0, "first_fork"): 2.0,
             (80.0, "fork_gap_inner"): 0.5, (200.0, "fork_gap_inner"): 0.5,
-            (80.0, "limb_angle"): 2.0, (200.0, "limb_angle"): 3.0},
+            (80.0, "limb_angle"): 2.0, (200.0, "limb_angle"): 3.0, (200.0, "height"): 2.0},
 }
 SPREAD80_WIDTH = 25.0
 LIMB_ANGLE = {80.0: 50.0, 200.0: 60.0}   # deg from vertical; the reference tree's limbs are at 49 at 80
