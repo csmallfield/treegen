@@ -321,7 +321,10 @@ def _shed(nodes, N, levels, Q, threshold, year, max_ring=np.inf):
     their light; thicker wood goes only once it carries no live buds at all. Judging
     big limbs as a whole fails, because a limb carries far more wood per leaf than a
     twig and so always looks poorer than the shaded twigs it should outlive.
-    The main stem is never shed. The tips a shed branch carried are remembered on the
+    The main stem is judged like a branch above the point where it carries less than
+    half the tree's tips: a leader that has lost the race to the limbs below it dies
+    back, as an old oak's does, and the crown goes on as spreading limbs. Below that
+    point it is never shed. The tips a shed branch carried are remembered on the
     node it left, so the wood below keeps the thickness it grew to support.
     """
     par = nodes.parent[:N]
@@ -333,8 +336,12 @@ def _shed(nodes, N, levels, Q, threshold, year, max_ring=np.inf):
     for lvl in reversed(levels[1:]):
         np.add.at(size, par[lvl], size[lvl])
         np.add.at(tips, par[lvl], tips[lvl])
+    trunk = nodes.main[:N].copy()                                   # the main stem: main all the way down
+    for lvl in levels[1:]:
+        trunk[lvl] &= trunk[par[lvl]]
+    judged = ~nodes.main[:N] | (trunk & (tips < 0.5 * tips[0]))
     small = nodes.ring[:N] < max_ring
-    base = live & ~nodes.main[:N] & np.where(small, Q < threshold * size, Q <= 0.0)
+    base = live & judged & np.where(small, Q < threshold * size, Q <= 0.0)
     base[0] = False
     if not base.any():
         return None
