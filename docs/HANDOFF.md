@@ -1,7 +1,137 @@
 # treegen — handoff
 
+**Read "Start here" first.** Everything below it is the history of earlier sessions,
+kept for the reasoning behind decisions; where it disagrees with "Start here", this
+section wins.
+
+---
+
+## Start here (2026-11-11)
+
+### State of the repo
+
+- GitHub `main` is the source of truth and was up to date when this was written. No
+  other checkout matters.
+- `out/` is gitignored and was copied by hand alongside the clone, for reference. It holds
+  renders, the growth cache and calibration results; the useful parts:
+  - `out/buds/calib*.json`: search results, read by `scripts/bud_eval.py --calib FILE --rank N`.
+    `calib11.json` rank 2 is the current reference oak; `calib4.json` rank 1 is the user's
+    favourite 80-year look.
+  - `out/buds/again_a80.png`, `out/buds/fav_a80.png`: that favourite at 80 years.
+  - `out/buds/c11r2_a80.png`, `c11r2_a200.png`: the current reference at 80 and 200.
+  - The growth cache in `out/` is keyed on a hash of the growth code, so stale entries are
+    ignored, never served.
+- Setup: `python -m venv .venv`, activate, `pip install -e ".[dev]"`. Python 3.12.
+  `pytest`: 55 tests, about 1-3 minutes. CI runs them on Ubuntu and Windows
+  (`.github/workflows/tests.yml`).
+
+### What the user wants
+
+- Treegen should get realistic trees from **established simulation models**, not from
+  hand-tuned settings. When something looks wrong, look for the missing or wrong piece of
+  the simulation first; a new knob is the last resort. The user raised this explicitly
+  ("we are deviating from sims by hacking different settings").
+- Get the **oak really right before any other species**. Birch and pine wait.
+- The user judges by eye from renders. Show trees next to the reference images and
+  explain what changed in plain terms.
+
+### Two growth models
+
+- **Colonization oak** (`species/quercus.toml`, `growth.model = "colonization"`): the
+  approved Phase 1 oak. Frozen; the definition-of-done sheet and
+  `docs/metrics/dod_baseline.json` guard it.
+- **Bud model** (`species/quercus_buds.toml`, `growth.model = "buds"`,
+  `treegen/core/buds.py`): Palubicki et al. 2009, where all active work is. Design,
+  experiments and every result are in `docs/BUD_BACKEND_DESIGN.md`; sections 14-20
+  cover the current model. What it has now, each grounded in a published mechanism:
+  - the paper's shadow propagation (`light_model = "shadow"`), Borchert-Honda allocation
+    with apical control that weakens with age, shedding by light (Takenaka);
+  - annual rings for thickness (pipe model), hydraulic limits by height and by path length;
+  - maintenance respiration (upkeep per metre of sapwood from each live tip to the root);
+  - growth-time elastic droop (green-oak stiffness, `wood_set`) and reaction wood, both per
+    metre of wood;
+  - bud viability (`bud_life`: lateral buds that do not break within a few years go latent);
+  - leader dieback (the stem above the point where it carries less than half the surviving
+    tips is judged like a branch);
+  - optional gravitropic set-point angles for side shoots (`lateral_angle`). Off for oak:
+    oak follows Rauh's architectural model, with branches orthotropic like the trunk.
+
+### Reference trees
+
+- **The user's favourite**: calib4 rank 1 at 80 years (25 m crown, first fork 4.1 m,
+  arching limbs, limbs about 49 deg from vertical). This is the look to keep at 80 years.
+  It was grown before upkeep, droop and dieback existed and overgrows by 200 years.
+- **Photos** in `reference/`: `200_year_oak.jpg`, the target 200-year character (a few
+  massive limbs spidering out at 55-65 deg, sagging, with upturned ends; probably a valley
+  oak, so a little more sprawling than a typical *Q. robur*); `quercus_robur_winter.jpg`
+  (long inner runs, clumped twig ends).
+- **Current reference in the species file**: calib11 rank 2. An open, spidering 200-year
+  frame (crown 31 m, limbs 66 deg). Weak points:
+  - short: 19 m at 200 years against 22-32 m;
+  - low first fork: 2.0 m against 3 m;
+  - **stiff limbs**: they stick out straight instead of sagging (the user's complaint);
+  - it relies on `tropism = -0.115` (shoots pulled downward), which is not oak biology.
+
+### The open problem and the agreed next step
+
+Every calibration has drifted to negative tropism, and forcing tropism to 0 or above
+made every target worse; strong upward tropism stalls the tree at a few hundred nodes.
+Cause: the paper's shadows fall **straight down**, so shoots stacked vertically shade
+each other and are shed, and the only way to spread is to grow sideways. Limbs grown
+sideways and held out straight are the stiff look. Details:
+`docs/BUD_BACKEND_DESIGN.md` section 20.
+
+**Next step (proposed, not started):** cast shadows from the sky instead of straight
+down. Shadow pyramids along a handful of sky directions (sheared grids, one integral-image
+pass each), weighted by sky radiance (for example the standard overcast sky, brightest at
+the zenith), replacing the single vertical pyramid in `_Shadow`. A bud at the crown edge
+then sees open sky to its side, upward growth stops defeating itself, and spread can come
+from light. Then:
+
+1. Check that tropism 0 or above now grows a spreading tree.
+2. Recalibrate with `--weights oak` and tropism held at 0 or above, droop and reaction
+   wood free, seeded from calib11 rank 2 and the favourite.
+3. Judge against the favourite at 80 and the photo at 200.
+
+### Tools
+
+- `scripts/bud_eval.py`: grows 20/80/200 years and prints DBH, height, crown width, first
+  fork, limb angle and bend, fork gaps, node counts. `--set group.name=value`,
+  `--calib FILE --rank N`, `--ages 80,200`, `--png PREFIX`, `--scene`.
+- `scripts/bud_calibrate.py`: random plus local search, 7 worker processes. Weight
+  presets: `even`, `spread80`, `oak` (spread80 plus limb angle 50 deg at 80 and 60 deg at
+  200, plus height at 200). `--around FILE --top N --local SHARE --spread S` samples near
+  earlier results. A 100-sample search takes about 50 minutes; run it in the background.
+- Metrics (`treegen/metrics.py`): `limb_angle` reads the spidering character well.
+  `limb_bend` does **not** read stiffness (the favourite scores -6 deg); a better stiffness
+  measure is still wanted (for example a limb's maximum departure from its chord, relative
+  to its length). `fork_gap_inner` barely responds to how open an old crown is.
+
+### Other open items
+
+- **Forest scenes** (bud model): the forest-edge lean emerges with no rule for it. Dense
+  forest is unconvincing because the neighbour proxies top out near 16 m while the oak
+  grows past them; a same-age stand should keep pace with the tree.
+- **Envelope modes** (agreed, not built): `none` / `guide` / `mask` for the bud model,
+  with the oak's typical open-grown silhouette in the species file's `[envelope]` section
+  and per-instance overrides in the scene.
+- The 2D renders clip 200-year crowns wider than the frame.
+
+### Working notes for Claude
+
+- Commit messages follow the user's global rules (see section 6). Ask before pushing; the
+  user often pushes themselves.
+- On Windows, write multi-line patch scripts to a file with the Write tool and run them;
+  heredoc quoting has broken them. Multiprocessing needs the `__main__` guard and cannot
+  run from stdin.
+- Use `rc=$?` (not a piped `tail`) when checking pytest's result before committing.
+
+---
+
+## History: handoff of 2026-10-09 and later notes
+
 Written 2026-10-09, at the end of the chat session that built Phase 1 (M1–M6) plus a
-first pass at M7. Attach this file to a new conversation to pick up where that one left off.
+first pass at M7. Sections 1-6 below are from then, with dated notes added as work went on.
 
 ---
 
